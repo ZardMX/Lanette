@@ -88,9 +88,6 @@ class Ghost {
 	}
 }
 
-const boardSize = 13;
-const lastRowIndex = boardSize - 1;
-const lastColumnIndex = boardSize - 1;
 const generateWallAttempts = 70;
 const boardConnectivity = 3;
 const generateCandyAttempts = 6;
@@ -152,12 +149,16 @@ const canMoveThroughSymbol = "-";
 class HauntersHauntedHouse extends ScriptedGame {
 	actionCommands: string[] = ['up', 'down', 'left', 'right', 'wait'];
 	board: Location[][] = [];
+	boardSize: number = 0;
+	lastRowIndex: number = 0;
+	lastColumnIndex: number = 0;
 	candyLocations: CandyLocation[] = [];
 	canMove: boolean = false;
 	collectedCandy: number = 0;
 	eliminatedPlayers = new Set<Player>();
 	maxPlayers = 15;
 	mimikyuHaunt: boolean = false;
+	mimikyuTrapped: boolean = false;
 	ghosts: Ghost[] = [];
 	ghostFrenzies: number = 0;
 	playerLocations = new Map<Player, [number, number]>();
@@ -165,6 +166,7 @@ class HauntersHauntedHouse extends ScriptedGame {
 	playerRemainingTurnMoves = new Map<Player, number>();
 	remainingGhostMoves: number = 0;
 	turnsWithoutHaunting: number = 0;
+	customBoard: boolean = false;
 
 	createHaunter(row: number, column: number): Ghost {
 		return new Ghost("Haunter", row, column, 1, false);
@@ -206,7 +208,7 @@ class HauntersHauntedHouse extends ScriptedGame {
 	}
 
 	inOnBoard(row: number, column: number): boolean {
-		return row >= 0 && column >= 0 && row < boardSize && column < boardSize;
+		return row >= 0 && column >= 0 && row < this.boardSize && column < this.boardSize;
 	}
 
 	countBlankTileDistance(board: number[][], row: number, column: number, value: number, positions: number[][][]): void {
@@ -265,11 +267,11 @@ class HauntersHauntedHouse extends ScriptedGame {
 				i--;
 			}
 
-			if (row < lastRowIndex) {
+			if (row < this.lastRowIndex) {
 				i = row + 1;
 				while (board[i][column] !== tileValues.wall) {
 					board[i][column] = tileValues.wall;
-					if (i === lastRowIndex) break;
+					if (i === this.lastRowIndex) break;
 					i++;
 				}
 			}
@@ -287,11 +289,11 @@ class HauntersHauntedHouse extends ScriptedGame {
 				j--;
 			}
 
-			if (column < lastColumnIndex) {
+			if (column < this.lastColumnIndex) {
 				j = column + 1;
 				while (board[row][j] !== tileValues.wall) {
 					board[row][j] = tileValues.wall;
-					if (j === lastColumnIndex) break;
+					if (j === this.lastColumnIndex) break;
 					j++;
 				}
 			}
@@ -299,17 +301,17 @@ class HauntersHauntedHouse extends ScriptedGame {
 	}
 
 	isBorderTile(x: number, y: number): boolean {
-		if (x > 0 && x < lastRowIndex) return false;
-		if (y > 0 && y < lastColumnIndex) return false;
+		if (x > 0 && x < this.lastRowIndex) return false;
+		if (y > 0 && y < this.lastColumnIndex) return false;
 		return true;
 	}
 
 	setupBoardTiles(): number[][] {
 		const board: number[][] = [];
 		// initialize board
-		for (let i = 0; i < boardSize; i++) {
+		for (let i = 0; i < this.boardSize; i++) {
 			board.push([]);
-			for (let j = 0; j < boardSize; j++) {
+			for (let j = 0; j < this.boardSize; j++) {
 				board[i].push(tileValues.blank);
 			}
 		}
@@ -318,9 +320,9 @@ class HauntersHauntedHouse extends ScriptedGame {
 		let triesRemaining = generateWallAttempts;
 		while (triesRemaining) {
 			triesRemaining--;
-			const x = this.random(boardSize);
-			const y = this.random(boardSize);
-			if (x === lastRowIndex && y === Math.floor(lastColumnIndex / 2)) continue;
+			const x = this.random(this.boardSize);
+			const y = this.random(this.boardSize);
+			if (x === this.lastRowIndex && y === Math.floor(this.lastColumnIndex / 2)) continue;
 			if (board[x][y] === tileValues.wall) continue;
 			let xDistance = 0;
 			let yDistance = 0;
@@ -333,12 +335,12 @@ class HauntersHauntedHouse extends ScriptedGame {
 				i--;
 			}
 
-			if (x < lastRowIndex) {
+			if (x < this.lastRowIndex) {
 				i = x + 1;
 				while (board[i][y] !== tileValues.wall) {
 					if (this.isBorderTile(i, y)) break;
 					xDistance++;
-					if (i === lastRowIndex) break;
+					if (i === this.lastRowIndex) break;
 					i++;
 				}
 			}
@@ -351,12 +353,12 @@ class HauntersHauntedHouse extends ScriptedGame {
 				j--;
 			}
 
-			if (y < lastColumnIndex) {
+			if (y < this.lastColumnIndex) {
 				j = y + 1;
 				while (board[x][j] !== tileValues.wall) {
 					if (this.isBorderTile(x, j)) break;
 					yDistance++;
-					if (j === lastColumnIndex) break;
+					if (j === this.lastColumnIndex) break;
 					j++;
 				}
 			}
@@ -373,8 +375,8 @@ class HauntersHauntedHouse extends ScriptedGame {
 
 		// count distance between blank tiles and get wall coordinates
 		let blankTileDistance = 1;
-		for (let i = 0; i < boardSize; i++) {
-			for (let j = 0; j < boardSize; j++) {
+		for (let i = 0; i < this.boardSize; i++) {
+			for (let j = 0; j < this.boardSize; j++) {
 				if (board[i][j] === tileValues.blank) {
 					blankTilePositionsByDistance.push([]);
 					this.countBlankTileDistance(board, i, j, blankTileDistance, blankTilePositionsByDistance);
@@ -385,12 +387,12 @@ class HauntersHauntedHouse extends ScriptedGame {
 			}
 		}
 
-		const startPosition = [lastRowIndex, Math.floor(boardSize / 2)];
+		const startPosition = [this.lastRowIndex, Math.floor(this.boardSize / 2)];
 		if (board[startPosition[0]][startPosition[1]] === tileValues.wall) {
 			startPosition[1] = startPosition[1] + 1;
-			if (startPosition[1] > lastColumnIndex) {
+			if (startPosition[1] > this.lastColumnIndex) {
 				startPosition[0] = startPosition[0] - 1;
-				startPosition[1] = Math.floor(boardSize / 2);
+				startPosition[1] = Math.floor(this.boardSize / 2);
 			}
 		}
 
@@ -561,15 +563,15 @@ class HauntersHauntedHouse extends ScriptedGame {
 
 	displayBoard(): void {
 		let html = '<div class="infobox"><font color="black"><table align="center" border="2">';
-		const playerLocations: Dict<Player[]> = {};
-		for (const id in this.players) {
-			const player = this.players[id];
-			if (player.eliminated) continue;
-			const location = this.playerLocations.get(this.players[id])!;
-			const coordinates = this.getTileCoordinates(location[0], location[1]);
-			if (!(coordinates in playerLocations)) playerLocations[coordinates] = [];
-			playerLocations[coordinates].push(player);
-		}
+		// const playerLocations: Dict<Player[]> = {};
+		// for (const id in this.players) {
+		// 	const player = this.players[id];
+		// 	if (player.eliminated) continue;
+		// 	const location = this.playerLocations.get(this.players[id])!;
+		// 	const coordinates = this.getTileCoordinates(location[0], location[1]);
+		// 	if (!(coordinates in playerLocations)) playerLocations[coordinates] = [];
+		// 	playerLocations[coordinates].push(player);
+		// }
 
 		const ghostLocations: Dict<string> = {};
 		for (const ghost of this.ghosts) {
@@ -593,17 +595,17 @@ class HauntersHauntedHouse extends ScriptedGame {
 					} else {
 						tileColor = Tools.hexColorCodes[tileColors.ghost]['background-color'];
 					}
-				} else if (coordinates in playerLocations) {
-					tileText = '<span title="' + playerLocations[coordinates].map(x => x.name).join(", ") + '">';
-					if (playerLocations[coordinates].length === 1) {
-						tileText += "P" + this.playerNumbers.get(playerLocations[coordinates][0]);
-					} else {
-						tileText += "*";
-					}
-					tileText += '</span>';
-					tileColor = Tools.hexColorCodes[tileColors.players]['background-color'];
-				}
-
+				} // else if (coordinates in playerLocations) {
+			// 		tileText = '<span title="' + playerLocations[coordinates].map(x => x.name).join(", ") + '">';
+			// 		// if (playerLocations[coordinates].length === 1) {
+			// 		// 	tileText += "P" + this.playerNumbers.get(playerLocations[coordinates][0]);
+			// 		// } else {
+			// 		// 	tileText += "*";
+			// 		// }
+			// 	// 	tileText += '</span>';
+			// 	// 	tileColor = Tools.hexColorCodes[tileColors.players]['background-color'];
+			// 	// }
+			//
 				html += '<td style=background-color:' + tileColor + '; width="20px"; height="20px"; align="center">' + tileText + '</td>';
 			}
 			html += '</tr>';
@@ -626,9 +628,9 @@ class HauntersHauntedHouse extends ScriptedGame {
 
 		const tiles = this.setupBoardTiles();
 		const switchLocations: {door: [number, number], tile: [number, number]}[] = [];
-		for (let i = 0; i < boardSize; i++) {
+		for (let i = 0; i < this.boardSize; i++) {
 			this.board.push([]);
-			for (let j = 0; j < boardSize; j++) {
+			for (let j = 0; j < this.boardSize; j++) {
 				const tile = tiles[i][j];
 				if (tile === tileValues.haunter) {
 					this.ghosts.push(this.createHaunter(i, j));
@@ -651,8 +653,8 @@ class HauntersHauntedHouse extends ScriptedGame {
 				} else if (tile >= 100) {
 					this.board[i].push(new Door(tile - 99));
 				} else if (tile <= -100) {
-					for (let row = 0; row < boardSize; row++) {
-						for (let column = 0; column < boardSize; column++) {
+					for (let row = 0; row < this.boardSize; row++) {
+						for (let column = 0; column < this.boardSize; column++) {
 							if (tiles[row][column] === (tile * -1)) {
 								switchLocations.push({door: [row, column], tile: [i, j]});
 								this.board[i].push(this.createBlankLocation());
@@ -677,6 +679,19 @@ class HauntersHauntedHouse extends ScriptedGame {
 		}).reverse();
 	}
 
+	setupCustomBoard(boardSize: number): void {
+		this.boardSize = boardSize;
+		this.lastRowIndex = boardSize - 1;
+		this.lastColumnIndex = boardSize - 1;
+		for (let i = 0; i < boardSize; i++) {
+			this.board.push([]);
+			for (let j = 0; j < boardSize; j++) {
+				this.board[i].push(this.createBlankLocation());
+			}
+		}
+		this.displayBoard();
+	}
+
 	onStart(): void {
 		let playerNumber = 1;
 		const players = this.shufflePlayers();
@@ -687,13 +702,17 @@ class HauntersHauntedHouse extends ScriptedGame {
 
 		let startingLocation: [number, number] = [0, 0];
 		while (!this.remainingGhostMoves) {
-			this.setupBoard();
-			this.setCandyLocations();
-
-			startingLocation = [lastRowIndex, Math.floor(lastColumnIndex / 2)];
+			if (!this.customBoard) {
+				this.boardSize = 13;
+				this.lastRowIndex = this.boardSize - 1;
+				this.lastColumnIndex = this.boardSize - 1;
+				this.setupBoard();
+				this.setCandyLocations();
+			}
+			startingLocation = [this.lastRowIndex, Math.floor(this.lastColumnIndex / 2)];
 			while (!this.board[startingLocation[0]][startingLocation[1]].canMoveThrough) {
 				startingLocation[1] = startingLocation[1] + 1;
-				if (startingLocation[1] > lastColumnIndex) {
+				if (startingLocation[1] > this.lastColumnIndex) {
 					startingLocation[0] = startingLocation[0] - 1;
 					startingLocation[1] = 0;
 				}
@@ -759,7 +778,6 @@ class HauntersHauntedHouse extends ScriptedGame {
 				this.moveGhosts();
 			});
 			this.displayBoard();
-			this.timeout = setTimeout(() => this.moveGhosts(), 30 * 1000);
 		});
 		this.sayUhtml(uhtmlName, html);
 	}
@@ -821,7 +839,7 @@ class HauntersHauntedHouse extends ScriptedGame {
 				const locationCopy = location.slice();
 				locationCopy[0] += direction[0];
 				locationCopy[1] += direction[1];
-				if (locationCopy[0] >= 0 && locationCopy[1] >= 0 && locationCopy[0] <= lastRowIndex && locationCopy[1] <= lastColumnIndex &&
+				if (locationCopy[0] >= 0 && locationCopy[1] >= 0 && locationCopy[0] <= this.lastRowIndex && locationCopy[1] <= this.lastColumnIndex &&
 					boardCopy[locationCopy[0]][locationCopy[1]] === canMoveThroughSymbol) {
 					const players = this.getPlayersOnTile(locationCopy[0], locationCopy[1]);
 					if (players.length) {
@@ -834,8 +852,12 @@ class HauntersHauntedHouse extends ScriptedGame {
 								ghost.row += direction[0];
 								ghost.column += direction[1];
 							}
-							if (ghost.name === "Mimikyu" && k === path.length) {
-								this.mimikyuHaunt = true;
+							if (ghost.name === "Mimikyu") {
+								if (this.remainingGhostMoves === 1) this.mimikyuTrapped = true;
+								if (k === path.length) this.mimikyuHaunt = true;
+							}
+							else {
+								this.mimikyuTrapped = false;
 							}
 						}
 						return;
@@ -884,7 +906,6 @@ class HauntersHauntedHouse extends ScriptedGame {
 				}
 			}
 		}
-
 		this.checkPlayerLocations();
 	}
 
@@ -911,9 +932,8 @@ class HauntersHauntedHouse extends ScriptedGame {
 				tile.unlocksDoor.canMoveThrough = true;
 			}
 		}
-
 		const atCandyLimit = this.collectedCandy >= candyLimit;
-		if (atCandyLimit || (this.remainingGhostMoves === 0 && this.getRemainingPlayerCount() > 0)) {
+		if (atCandyLimit || ((this.remainingGhostMoves === 0 || this.mimikyuTrapped) && this.getRemainingPlayerCount() > 0)) {
 			this.say("Since " + (atCandyLimit ? "the players have collected " + candyLimit + " candy" : "all remaining players are safe " +
 				"from the ghosts") + ", the players win!");
 			this.collectedCandy = (atCandyLimit ? candyLimit : Math.max(1200, this.collectedCandy));
@@ -962,7 +982,7 @@ class HauntersHauntedHouse extends ScriptedGame {
 		for (let i = 0; i < spaces; i++) {
 			location[0] += movement[0];
 			location[1] += movement[1];
-			if (location[0] < 0 || location[1] < 0 || location[0] > lastRowIndex || location[1] > lastColumnIndex) {
+			if (location[0] < 0 || location[1] < 0 || location[0] > this.lastRowIndex || location[1] > this.lastColumnIndex) {
 				player.say("Oops! Moving " + direction + " " + spaces + " space" + (spaces > 1 ? "s" : "") + " would put you over the " +
 					"board!");
 				return;
@@ -1023,6 +1043,151 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 			player.say("You have waited until the next round!");
 			return true;
 		},
+	},
+	customboard: {
+		command(target, room, user) {
+			if (this.isPm(room) || !user.hasRank(room, 'voice')) return false;
+			if (this.customBoard) {
+				this.say("A custom board with the cordinates " + this.boardSize + ", " + this.boardSize + " already exits.");
+				return false;
+			}
+			if (!target) {
+				this.say("You must specify the board cordinates.");
+				return false;
+			}
+			const cordinates = parseInt(target);
+			if (!cordinates || !Tools.isInteger(target) || cordinates < 5 || cordinates > 13) {
+				this.say("You can only set the board cordinates between the numbers 5 - 13.");
+				return false;
+			}
+			this.customBoard = true;
+			this.setupCustomBoard(cordinates);
+			this.say("Custom board created with cordinates " + cordinates + ", " + cordinates + ".");
+			return true;
+		},
+		signupsGameCommand: true,
+	},
+	createghost: {
+		command(target, room, user, cmd) {
+			if (this.isPm(room) || !user.hasRank(room, 'voice')) return false;
+			const targets = target.split(',');
+			if (targets.length === 1) {
+				this.say("Usage: " + Config.commandCharacter + cmd + " [Ghost name], [cordinate X], [cordinate Y]");
+				return false;
+			}
+			const x: number = parseInt(Tools.toId(targets[1]));
+			const y: number = parseInt(Tools.toId(targets[2]));
+			const x2: number = x - 1;
+			const y2: number = y - 1;
+			const ghost: string = Tools.toId(targets[0]);
+			if (x < 1 || y < 1 || x2 > this.lastRowIndex || y2 > this.lastColumnIndex) {
+				this.say("Invalid cordinates.");
+				return false;
+			}
+			switch (ghost) {
+				case 'haunter':
+					this.ghosts.push(this.createHaunter(x2, y2));
+				break;
+				case 'gengar':
+					this.ghosts.push(this.createGengar(x2, y2));
+				break;
+				case 'dusclops':
+					this.ghosts.push(this.createDusclops(x2, y2));
+				break;
+				case 'mimikyu':
+					this.ghosts.push(this.createMimikyu(x2, y2));
+				break;
+			}
+			this.say(this.ghosts[this.ghosts.length - 1].name + " was placed on the cordinates " + x + ", " + y + ".");
+			this.displayBoard();
+			return true;
+		},
+		signupsGameCommand: true,
+	},
+	createwall: {
+		command(target, room, user, cmd) {
+			if (this.isPm(room) || !user.hasRank(room, 'voice')) return false;
+			const cordinates = target.split(',');
+			if (cordinates.length === 1) {
+				this.say("Usage: " + Config.commandCharacter + cmd + " [cordinate X], [cordinate Y]");
+				return false;
+			}
+			const x: number = parseInt(Tools.toId(cordinates[0]));
+			const y: number = parseInt(Tools.toId(cordinates[1]));
+			const x2: number = x - 1;
+			const y2: number = y - 1;
+			if (x < 1 || y < 1 || x2 > this.lastRowIndex || y2 > this.lastColumnIndex) {
+				this.say("Invalid cordinates.");
+				return false;
+			}
+			this.board[x2][y2] = this.createWall();
+			this.say("Wall was placed on the cordinates " + x + ", " + y + ".");
+			this.displayBoard();
+			return true;
+		},
+		signupsGameCommand: true,
+	},
+	createcandyspot: {
+		command(target, room, user, cmd) {
+			if (this.isPm(room) || !user.hasRank(room, 'voice')) return false;
+			const cordinates = target.split(',');
+			if (cordinates.length === 1) {
+				this.say("Usage: " + Config.commandCharacter + cmd + " [cordinate X], [cordinate Y]");
+				return false;
+			}
+			const x: number = parseInt(Tools.toId(cordinates[0]));
+			const y: number = parseInt(Tools.toId(cordinates[1]));
+			const x2: number = x - 1;
+			const y2: number = y - 1;
+			if (x < 1 || y < 1 || x2 > this.lastRowIndex || y2 > this.lastColumnIndex) {
+				this.say("Invalid cordinates.");
+				return false;
+			}
+			this.board[x2][y2] = this.createWall();
+			const candyLocation = new CandyLocation();
+			this.candyLocations.push(candyLocation);
+			this.board[x2][y2] = candyLocation;
+			this.say("Candy spot was placed on the cordinates " + x + ", " + y + ".");
+			this.displayBoard();
+			return true;
+		},
+		signupsGameCommand: true,
+	},
+	createdoor: {
+		command(target, room, user, cmd) {
+			if (this.isPm(room) || !user.hasRank(room, 'voice')) return false;
+			const cordinates = target.split(',');
+			if (cordinates.length < 5) {
+				this.say("Usage: " + Config.commandCharacter + cmd + " [cordinate X], [cordinate Y], [door number], [cordinate X2], [cordinate Y2]");
+				return false;
+			}
+			const x: number = parseInt(Tools.toId(cordinates[0]));
+			const y: number = parseInt(Tools.toId(cordinates[1]));
+			const num: number = parseInt(Tools.toId(cordinates[2]));
+			const doorX: number = parseInt(Tools.toId(cordinates[3]));
+			const doorY: number = parseInt(Tools.toId(cordinates[4]));
+			const x2: number = x - 1;
+			const y2: number = y - 1;
+			const doorX2: number = doorX - 1;
+			const doorY2: number = doorY - 1;
+			if (x < 1 || y < 1 || x2 > this.lastRowIndex || y2 > this.lastColumnIndex) {
+				this.say("Invalid switch cordinates.");
+				return false;
+			}
+			if (doorX < 1 || doorY < 1 || doorX2 > this.lastRowIndex || doorY2 > this.lastColumnIndex) {
+				this.say("Invalid door cordinates.");
+				return false;
+			}
+			if (num > 9 || num < 1) {
+				this.say("The door number must be between 1 - 9.");
+				return false;
+			}
+			this.board[x2][y2] = new Switch(this.board[doorX2][doorY2] as Door);
+			this.say("Switch number " + num + " was placed on the cordinates " + x + ", " + y + ". Door number " + num + " was placed on the cordinates " + doorX + ", " + doorY + ".");
+			this.displayBoard();
+			return true;
+		},
+		signupsGameCommand: true,
 	},
 };
 
