@@ -1158,32 +1158,34 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 			if (this.isPm(room) || !user.hasRank(room, 'voice')) return false;
 			const cordinates = target.split(',');
 			if (cordinates.length < 5) {
-				this.say("Usage: " + Config.commandCharacter + cmd + " [cordinate X], [cordinate Y], [door number], [cordinate X2], [cordinate Y2]");
+				this.say("Usage: " + Config.commandCharacter + cmd + " [door X], [door Y], [door number], [switch X2], [cordinate Y2]");
 				return false;
 			}
-			const x: number = parseInt(Tools.toId(cordinates[0]));
-			const y: number = parseInt(Tools.toId(cordinates[1]));
+			const doorX: number = parseInt(Tools.toId(cordinates[0]));
+			const doorY: number = parseInt(Tools.toId(cordinates[1]));
 			const num: number = parseInt(Tools.toId(cordinates[2]));
-			const doorX: number = parseInt(Tools.toId(cordinates[3]));
-			const doorY: number = parseInt(Tools.toId(cordinates[4]));
-			const x2: number = x - 1;
-			const y2: number = y - 1;
+			const switchX: number = parseInt(Tools.toId(cordinates[3]));
+			const switchY: number = parseInt(Tools.toId(cordinates[4]));
+
 			const doorX2: number = doorX - 1;
 			const doorY2: number = doorY - 1;
-			if (x < 1 || y < 1 || x2 > this.lastRowIndex || y2 > this.lastColumnIndex) {
-				this.say("Invalid switch cordinates.");
-				return false;
-			}
+			const switchX2: number = switchX - 1;
+			const switchY2: number = switchY - 1;
 			if (doorX < 1 || doorY < 1 || doorX2 > this.lastRowIndex || doorY2 > this.lastColumnIndex) {
 				this.say("Invalid door cordinates.");
+				return false;
+			}
+			if (switchX < 1 || switchY < 1 || switchX2 > this.lastRowIndex || switchY2 > this.lastColumnIndex) {
+				this.say("Invalid switch cordinates.");
 				return false;
 			}
 			if (num > 9 || num < 1) {
 				this.say("The door number must be between 1 - 9.");
 				return false;
 			}
-			this.board[x2][y2] = new Switch(this.board[doorX2][doorY2] as Door);
-			this.say("Switch number " + num + " was placed on the cordinates " + x + ", " + y + ". Door number " + num + " was placed on the cordinates " + doorX + ", " + doorY + ".");
+			this.board[doorX2][doorY2] = new Door(num);
+			this.board[switchX2][switchY2] = new Switch(this.board[doorX2][doorY2] as Door);
+			this.say("Door number " + num + " was placed on the cordinates " + doorX + ", " + doorY + ". Switch number " + num + " was placed on the cordinates " + switchX + ", " + switchY + ".");
 			this.displayBoard();
 			return true;
 		},
