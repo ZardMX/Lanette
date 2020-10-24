@@ -1158,7 +1158,7 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 			if (this.isPm(room) || !user.hasRank(room, 'voice')) return false;
 			const cordinates = target.split(',');
 			if (cordinates.length < 5) {
-				this.say("Usage: " + Config.commandCharacter + cmd + " [door X], [door Y], [door number], [switch X2], [cordinate Y2]");
+				this.say("Usage: " + Config.commandCharacter + cmd + " [door X], [door Y], [door number], [switch X], [switch Y]");
 				return false;
 			}
 			const doorX: number = parseInt(Tools.toId(cordinates[0]));
