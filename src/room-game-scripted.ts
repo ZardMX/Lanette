@@ -283,7 +283,7 @@ export class ScriptedGame extends Game {
 	}
 
 	start(): boolean {
-		if (this.minPlayers && this.playerCount < this.minPlayers) return false;
+		// if (this.minPlayers && this.playerCount < this.minPlayers) return false;
 
 		if (this.startTimer) clearTimeout(this.startTimer);
 		this.started = true;
