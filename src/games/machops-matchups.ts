@@ -1,8 +1,8 @@
 import type { Player } from "../room-activity";
 import { ScriptedGame } from "../room-game-scripted";
 import type { Room } from "../rooms";
-import type { IPokemon } from "../types/dex";
 import type { GameCommandDefinitions, IGameFile } from "../types/games";
+import type { IPokemon } from "../types/pokemon-showdown";
 import type { User } from "../users";
 
 const data: {pokemon: Dict<readonly string[]>} = {
@@ -144,4 +144,5 @@ export const game: IGameFile<MachopsMatchups> = {
 		"matchups!",
 	name: "Machop's Matchups",
 	mascot: "Machop",
+	scriptedOnly: true,
 };

@@ -13,9 +13,15 @@ describe("Dex", () => {
 		assert(Dex.data.pokemonKeys.length > 1);
 		assert(Dex.data.typeKeys.length > 1);
 
-		assert(Dex.data.badges.length > 1);
-		assert(Dex.data.characters.length > 1);
-		assert(Dex.data.locations.length > 1);
+		const badges = Dex.getBadges();
+		assert(badges.length > 1);
+
+		const characters = Dex.getCharacters();
+		assert(characters.length > 1);
+
+		const locations = Dex.getLocations();
+		assert(locations.length > 1);
+
 		assert(Dex.data.trainerClasses.length > 1);
 
 		assert(Object.keys(Dex.data.categories).length > 1);
@@ -75,12 +81,16 @@ describe("Dex", () => {
 		assertStrictEqual(Dex.getMoveAvailability(Dex.getExistingMove("Aeroblast")), 2);
 
 		// other in-game data
-		for (let i = 0; i < Dex.data.badges.length; i++) {
-			assert(Dex.data.badges.indexOf(Dex.data.badges[i]) === i, "Duplicate badge " + Dex.data.badges[i]);
+		for (let i = 0; i < badges.length; i++) {
+			assert(badges.indexOf(badges[i]) === i, "Duplicate badge " + badges[i]);
 		}
 
-		for (let i = 0; i < Dex.data.characters.length; i++) {
-			assert(Dex.data.characters.indexOf(Dex.data.characters[i]) === i, "Duplicate character " + Dex.data.characters[i]);
+		for (let i = 0; i < characters.length; i++) {
+			assert(characters.indexOf(characters[i]) === i, "Duplicate character " + characters[i]);
+		}
+
+		for (let i = 0; i < locations.length; i++) {
+			assert(locations.indexOf(locations[i]) === i, "Duplicate location " + locations[i]);
 		}
 
 		for (let i = Dex.gen; i >= 1; i--) {
@@ -192,19 +202,6 @@ describe("Dex", () => {
 		assertStrictEqual(Dex.getTrainerSpriteId("acetrainer-gen4"), "acetrainer-gen4");
 		assertStrictEqual(Dex.getTrainerSpriteId("agatha"), "agatha-gen3");
 		assertStrictEqual(Dex.getTrainerSpriteId("agatha-gen3"), "agatha-gen3");
-	});
-	it('should return proper values from parseFormatThread()', () => {
-		let parsedThread = Dex.parseFormatThread("");
-		assertStrictEqual(parsedThread.description, '');
-		assertStrictEqual(parsedThread.id, '');
-
-		parsedThread = Dex.parseFormatThread('&bullet; <a href="https://www.smogon.com/forums/threads/3666247/">OU Sample Teams</a>');
-		assertStrictEqual(parsedThread.description, 'OU Sample Teams');
-		assertStrictEqual(parsedThread.id, '3666247');
-
-		parsedThread = Dex.parseFormatThread('&bullet; <a href="https://www.smogon.com/forums/threads/3666247">OU Sample Teams</a>');
-		assertStrictEqual(parsedThread.description, 'OU Sample Teams');
-		assertStrictEqual(parsedThread.id, '3666247');
 	});
 	it('should return proper values from splitNameAndCustomRules()', () => {
 		let split = Dex.splitNameAndCustomRules("ou");

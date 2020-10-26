@@ -42,13 +42,15 @@ class EkansEdges extends QuestionAndAnswer {
 	lastEdge: string = '';
 
 	static loadData(room: Room | User): void {
-		for (const character of Dex.data.characters) {
+		const characters = Dex.getCharacters();
+		for (const character of characters) {
 			const edge = character.charAt(0) + " - " + character.substr(-1);
 			if (!data["Characters"][edge]) data["Characters"][edge] = [];
 			data["Characters"][edge].push(character);
 		}
 
-		for (const location of Dex.data.locations) {
+		const locations = Dex.getLocations();
+		for (const location of locations) {
 			const edge = location.charAt(0) + " - " + location.substr(-1);
 			if (!data["Locations"][edge]) data["Locations"][edge] = [];
 			data["Locations"][edge].push(location);

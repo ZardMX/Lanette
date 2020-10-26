@@ -1,12 +1,21 @@
 import path = require('path');
 
+import { alternateIconNumbers } from './data/alternate-icon-numbers';
+import { badges } from './data/badges';
+import { categories } from './data/categories';
+import { characters } from './data/characters';
+import { formatLinks } from './data/format-links';
+import { locations } from './data/locations';
+import { trainerClasses } from './data/trainer-classes';
 import type {
-	IAbility, IAbilityCopy, IDataTable, IFormat, IFormatDataLinks, IGetPossibleTeamsOptions, IGifData,
-	IItem, IItemCopy, ILearnsetData, IMove, IMoveCopy, INature, IPokemon, IPokemonCopy, ISeparatedCustomRules, ITypeData,
-	IPokemonShowdownDex, IPokemonShowdownValidator, IPSFormat, IFormatThread
+	CategoryData, IDataTable, IGetPossibleTeamsOptions,
+	IGifData, ISeparatedCustomRules, LocationTypes
 } from './types/dex';
-
-let formatLinks: Dict<IFormatDataLinks | undefined>;
+import type {
+	IAbility, IAbilityCopy, IFormat,
+	IItem, IItemCopy, ILearnsetData, IMove, IMoveCopy, INature, IPokemon, IPokemonCopy,
+	IPokemonShowdownDex, IPokemonShowdownValidator, IPSFormat, ITypeData
+} from './types/pokemon-showdown';
 
 const MAX_CUSTOM_NAME_LENGTH = 100;
 const DEFAULT_CUSTOM_RULES_NAME = " (with custom rules)";
@@ -141,6 +150,7 @@ export class Dex {
 	readonly omotms: string[] = [];
 	readonly tagNames: typeof tagNames = tagNames;
 
+	readonly clientDataDirectory: string;
 	readonly currentMod: string;
 	readonly gen: number;
 	readonly isBase: boolean;
@@ -193,6 +203,7 @@ export class Dex {
 			this.pokemonShowdownValidator = dexes['base'].pokemonShowdownValidator;
 		}
 
+		this.clientDataDirectory = path.join(Tools.rootFolder, 'client-data');
 		this.currentMod = mod;
 		this.gen = gen;
 		this.isBase = isBase;
@@ -268,37 +279,27 @@ export class Dex {
 			}
 		}
 
-		const lanetteDataDir = path.join(Tools.rootFolder, 'data');
-
-		// eslint-disable-next-line @typescript-eslint/no-var-requires
-		formatLinks = require(path.join(lanetteDataDir, 'format-links.js')) as Dict<IFormatDataLinks | undefined>;
-
 		/* eslint-disable @typescript-eslint/no-var-requires */
-		const alternateIconNumbers = require(path.join(lanetteDataDir, 'alternate-icon-numbers.js')) as
-			{right: Dict<number>; left: Dict<number>};
-		const badges = require(path.join(lanetteDataDir, 'badges.js')) as string[];
-		const categories = require(path.join(lanetteDataDir, 'categories.js')) as Dict<string>;
-		const characters = require(path.join(lanetteDataDir, 'characters.js')) as string[];
-		const locations = require(path.join(lanetteDataDir, 'locations.js')) as string[];
 		// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-		const gifData = require(path.join(lanetteDataDir, 'pokedex-mini.js')).BattlePokemonSprites as Dict<IGifData | undefined>;
+		const gifData = require(path.join(this.clientDataDirectory, 'pokedex-mini.js')).BattlePokemonSprites as Dict<IGifData | undefined>;
 		// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-		const gifDataBW = require(path.join(lanetteDataDir, 'pokedex-mini-bw.js')).BattlePokemonSpritesBW as Dict<IGifData | undefined>;
-		const trainerClasses = require(path.join(lanetteDataDir, 'trainer-classes.js')) as string[];
+		const gifDataBW = require(path.join(this.clientDataDirectory, 'pokedex-mini-bw.js'))
+			.BattlePokemonSpritesBW as Dict<IGifData | undefined>;
 
-		const trainerSpriteList = require(path.join(lanetteDataDir, 'trainer-sprites.js')) as string[];
+		const trainerSpriteList = require(path.join(this.clientDataDirectory, 'trainer-sprites.js')) as string[];
 		const trainerSprites: Dict<string> = {};
 		for (const trainer of trainerSpriteList) {
 			trainerSprites[Tools.toId(trainer)] = trainer;
 		}
 		/* eslint-enable */
 
-		const speciesList = Object.keys(categories);
+		const parsedCategories: CategoryData = categories;
+		const speciesList = Object.keys(parsedCategories);
 		for (const species of speciesList) {
 			const id = Tools.toId(species);
 			if (id === species) continue;
-			categories[id] = categories[species];
-			delete categories[species];
+			parsedCategories[id] = parsedCategories[species];
+			delete parsedCategories[species];
 		}
 
 		const abilityKeys = Object.keys(this.pokemonShowdownDex.data.Abilities);
@@ -384,7 +385,7 @@ export class Dex {
 			typeKeys: Object.keys(this.pokemonShowdownDex.data.TypeChart).map(x => Tools.toId(x)),
 			alternateIconNumbers,
 			badges,
-			categories,
+			categories: parsedCategories,
 			characters,
 			colors,
 			eggGroups,
@@ -407,7 +408,7 @@ export class Dex {
 			if (typeof file !== 'string') {
 				console.log(file);
 			} else if (file) {
-				await Tools.safeWriteFile(path.join(Tools.rootFolder, 'data', fileName), file);
+				await Tools.safeWriteFile(path.join(this.clientDataDirectory, fileName), file);
 			}
 		}
 	}
@@ -766,6 +767,42 @@ export class Dex {
 		return type;
 	}
 
+	getBadges(): string[] {
+		const badges: string[] = [];
+		for (const i in this.data.badges) {
+			for (const badge of this.data.badges[i]) {
+				badges.push(badge);
+			}
+		}
+
+		return badges;
+	}
+
+	getCharacters(): string[] {
+		const characters: string[] = [];
+		for (const i in this.data.characters) {
+			for (const character of this.data.characters[i]) {
+				characters.push(character);
+			}
+		}
+
+		return characters;
+	}
+
+	getLocations(): string[] {
+		const locations: string[] = [];
+		for (const region in this.data.locations) {
+			const types = Object.keys(this.data.locations[region]) as LocationTypes[];
+			for (const type of types) {
+				for (const location of this.data.locations[region][type]) {
+					locations.push(location);
+				}
+			}
+		}
+
+		return locations;
+	}
+
 	/**
 	 * Returns true if target is immune to source
 	 */
@@ -1120,7 +1157,7 @@ export class Dex {
 		if (format.threads) {
 			const threads = format.threads.slice();
 			for (const thread of threads) {
-				const parsedThread = this.parseFormatThread(thread);
+				const parsedThread = Tools.parseFormatThread(thread);
 				if (parsedThread.description.includes('Viability Rankings')) {
 					viability = parsedThread.id;
 				} else if (parsedThread.description.includes('Sample Teams')) {
@@ -1158,19 +1195,13 @@ export class Dex {
 				format.viability = viability;
 			}
 
-			const links: ('info' | 'roleCompendium' | 'teams' | 'viability')[] = ['info', 'roleCompendium', 'teams', 'viability'];
+			const links = ['info', 'roleCompendium', 'teams', 'viability', 'genGuide'] as const;
 			for (const id of links) {
-				const link = format[id];
-				if (!link) continue;
-				let num = parseInt(link.split("/")[0]);
-				if (isNaN(num)) continue;
-				// @ts-expect-error
-				if (format[id + '-official']) {
+				if (format[id]) {
 					// @ts-expect-error
-					const officialNum = parseInt(format[id + '-official']);
-					if (!isNaN(officialNum) && officialNum > num) num = officialNum;
+					const officialLink = format[id + '-official'] as string;
+					format[id] = Tools.getNewerForumThread(format[id] as string, officialLink);
 				}
-				format[id] = 'http://www.smogon.com/forums/threads/' + num;
 			}
 		}
 
@@ -1183,51 +1214,37 @@ export class Dex {
 		return format;
 	}
 
-	parseFormatThread(thread: string): IFormatThread {
-		const parsedThread: IFormatThread = {description: '', id: ''};
-		if (thread.startsWith('&bullet;') && thread.includes('<a href="')) {
-			parsedThread.description = thread.split('</a>')[0].split('">')[1].trim();
-
-			let id = thread.split('<a href="')[1].split('">')[0].trim();
-			if (id.endsWith('/')) id = id.substr(0, id.length - 1);
-			parsedThread.id = id.split('/').pop()!;
-		}
-		return parsedThread;
-	}
-
 	getFormatInfoDisplay(format: IFormat): string {
 		let html = '';
 		if (format.desc) {
 			html += '<br />&nbsp; - ' + format.desc;
-			if (format.info && !format.team) {
+			if (format.info) {
 				html += ' More info ';
-				if (format.userHosted) {
-					html += 'on the <a href="' + format.info + '">official page</a>';
-				} else if (format.info.startsWith('https://www.smogon.com/dex/')) {
-					html += 'on the  <a href="' + format.info + '">dex page</a>';
+				if (format.info.startsWith(Tools.smogonDexPrefix)) {
+					html += 'on the <a href="' + format.info + '">dex page</a>';
 				} else {
-					html += 'in the  <a href="' + format.info + '">discussion thread</a>';
+					html += 'in the <a href="' + format.info + '">discussion thread</a>';
 				}
 			}
 		} else if (format.info) {
-			if (format.userHosted) {
-				html += '<br />&nbsp; - Description and more info on the <a href="' + format.info + '">official page</a>.';
-				if (format.generator) {
-					html += '<br />&nbsp; - Use our <a href="' + format.generator + '">random generator</a> to ease the hosting process.';
-				}
-			} else {
-				html += '<br />&nbsp; - Description and more info ' + (format.info.startsWith('https://www.smogon.com/dex/') ? 'on the ' +
-					'<a href="' + format.info + '">dex page' : 'in the  <a href="' + format.info + '">discussion thread') + '</a>.';
-			}
+			html += '<br />&nbsp; - Description and more info ' + (format.info.startsWith(Tools.smogonDexPrefix) ? 'on the ' +
+				'<a href="' + format.info + '">dex page' : 'in the  <a href="' + format.info + '">discussion thread') + '</a>.';
+		}
+
+		if (format.genGuide) {
+			html += '<br />&nbsp; - Unfamiliar with Gen ' + format.gen + '? Review the <a href="' + format.genGuide + '">mechanics ' +
+				'differences</a> before battling.';
 		}
 
 		if (format.teams) {
 			html += '<br />&nbsp; - Need to borrow a team? Check out the <a href="' + format.teams + '">sample teams thread</a>.';
 		}
+
 		if (format.viability) {
 			html += '<br />&nbsp; - See how viable each Pokemon is in the <a href="' + format.viability + '">viability rankings ' +
 				'thread</a>.';
 		}
+
 		if (format.roleCompendium) {
 			html += '<br />&nbsp; - Check the common role that each Pokemon plays in the <a href="' + format.roleCompendium + '">role ' +
 				'compendium thread</a>.';
