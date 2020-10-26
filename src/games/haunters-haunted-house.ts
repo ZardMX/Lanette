@@ -1050,21 +1050,21 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 		command(target, room, user) {
 			if (this.isPm(room) || !user.hasRank(room, 'voice')) return false;
 			if (this.customBoard) {
-				this.say("A custom board with the cordinates " + this.boardSize + ", " + this.boardSize + " already exits.");
+				this.say("A custom board with the coordinates " + this.boardSize + ", " + this.boardSize + " already exits.");
 				return false;
 			}
 			if (!target) {
-				this.say("You must specify the board cordinates.");
+				this.say("You must specify the board coordinates.");
 				return false;
 			}
-			const cordinates = parseInt(target);
-			if (!cordinates || !Tools.isInteger(target) || cordinates < 5 || cordinates > 13) {
-				this.say("You can only set the board cordinates between the numbers 5 - 13.");
+			const coordinates = parseInt(target);
+			if (!coordinates || !Tools.isInteger(target) || coordinates < 5 || coordinates > 13) {
+				this.say("You can only set the board coordinates between the numbers 5 - 13.");
 				return false;
 			}
 			this.customBoard = true;
-			this.setupCustomBoard(cordinates);
-			this.say("Custom board created with cordinates " + cordinates + ", " + cordinates + ".");
+			this.setupCustomBoard(coordinates);
+			this.say("Custom board created with coordinates " + coordinates + ", " + coordinates + ".");
 			return true;
 		},
 		signupsGameCommand: true,
@@ -1077,7 +1077,7 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 			const ghost: string = Tools.toId(targets[0]);
 			const ghosts = ['dusclops', 'haunter', 'gengar', 'mimikyu'];
 			if (!ghosts.includes(ghost)) {
-				this.say("Usage: " + Config.commandCharacter + cmd + " [Ghost name], [cordinate X], [cordinate Y]");
+				this.say("Usage: " + Config.commandCharacter + cmd + " [Ghost name], [coordinate X], [coordinate Y]");
 				return false;
 			}
 			const x: number = parseInt(Tools.toId(targets[1]));
@@ -1085,7 +1085,7 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 			const x2: number = x - 1;
 			const y2: number = y - 1;
 			if (!x || !y || x2 > this.lastRowIndex || y2 > this.lastColumnIndex) {
-				this.say("Invalid cordinates.");
+				this.say("Invalid coordinates.");
 				return false;
 			}
 			switch (ghost) {
@@ -1102,7 +1102,7 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 					this.ghosts.push(this.createMimikyu(x2, y2));
 				break;
 			}
-			this.say(this.ghosts[this.ghosts.length - 1].name + " was placed on the cordinates " + x + ", " + y + ".");
+			this.say(this.ghosts[this.ghosts.length - 1].name + " was placed on the coordinates " + x + ", " + y + ".");
 			this.displayBoard();
 			return true;
 		},
@@ -1112,43 +1112,43 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 	createwall: {
 		command(target, room, user, cmd) {
 			if (this.isPm(room) || !user.hasRank(room, 'voice')) return false;
-			const cordinates = target.split(',');
-			if (cordinates.length === 1) {
-				this.say("Usage: " + Config.commandCharacter + cmd + " [cordinate X], [cordinate Y]");
+			const coordinates = target.split(',');
+			if (coordinates.length === 1) {
+				this.say("Usage: " + Config.commandCharacter + cmd + " [coordinate X], [coordinate Y]");
 				return false;
 			}
-			const x: number = parseInt(Tools.toId(cordinates[0]));
-			const y: number = parseInt(Tools.toId(cordinates[1]));
+			const x: number = parseInt(Tools.toId(coordinates[0]));
+			const y: number = parseInt(Tools.toId(coordinates[1]));
 			const x2: number = x - 1;
 			const y2: number = y - 1;
 			if (!x || !y || x2 > this.lastRowIndex || y2 > this.lastColumnIndex) {
-				this.say("Invalid cordinates.");
+				this.say("Invalid coordinates.");
 				return false;
 			}
 			switch (this.board[x2][y2].color) {
 				case tileColors.wall:
-					this.say("A wall already exists in cordinates " + x + ", " + y + ".");
+					this.say("A wall already exists in coordinates " + x + ", " + y + ".");
 				return false;
 				case tileColors.candy:
-					this.say("A candy spot already exists in cordinates " + x + ", " + y + ".");
+					this.say("A candy spot already exists in coordinates " + x + ", " + y + ".");
 				return false;
 				case tileColors.door:
-					this.say("A door already exists in cordinates " + x + ", " + y + ".");
+					this.say("A door already exists in coordinates " + x + ", " + y + ".");
 				return false;
 				case tileColors.switch:
-					this.say("A switch already exists in cordinates " + x + ", " + y + ".");
+					this.say("A switch already exists in coordinates " + x + ", " + y + ".");
 				return false;
 			}
 			if (this.ghosts.length) {
 				for (const ghost of this.ghosts) {
 					if (x2 === ghost.row && y2 === ghost.column) {
-						this.say("A " + ghost.name + " already exists in cordinates " + x + ", " + y + ".");
+						this.say("A " + ghost.name + " already exists in coordinates " + x + ", " + y + ".");
 						return false;
 					}
 				}
 			}
 			this.board[x2][y2] = this.createWall();
-			this.say("Wall was placed on the cordinates " + x + ", " + y + ".");
+			this.say("Wall was placed on the coordinates " + x + ", " + y + ".");
 			this.displayBoard();
 			return true;
 		},
@@ -1158,37 +1158,37 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 	createcandyspot: {
 		command(target, room, user, cmd) {
 			if (this.isPm(room) || !user.hasRank(room, 'voice')) return false;
-			const cordinates = target.split(',');
-			if (cordinates.length === 1) {
-				this.say("Usage: " + Config.commandCharacter + cmd + " [cordinate X], [cordinate Y]");
+			const coordinates = target.split(',');
+			if (coordinates.length === 1) {
+				this.say("Usage: " + Config.commandCharacter + cmd + " [coordinate X], [coordinate Y]");
 				return false;
 			}
-			const x: number = parseInt(Tools.toId(cordinates[0]));
-			const y: number = parseInt(Tools.toId(cordinates[1]));
+			const x: number = parseInt(Tools.toId(coordinates[0]));
+			const y: number = parseInt(Tools.toId(coordinates[1]));
 			const x2: number = x - 1;
 			const y2: number = y - 1;
 			if (!x || !y || x2 > this.lastRowIndex || y2 > this.lastColumnIndex) {
-				this.say("Invalid cordinates.");
+				this.say("Invalid coordinates.");
 				return false;
 			}
 			switch (this.board[x2][y2].color) {
 				case tileColors.wall:
-					this.say("A wall already exists in cordinates " + x + ", " + y + ".");
+					this.say("A wall already exists in coordinates " + x + ", " + y + ".");
 				return false;
 				case tileColors.candy:
-					this.say("A candy spot already exists in cordinates " + x + ", " + y + ".");
+					this.say("A candy spot already exists in coordinates " + x + ", " + y + ".");
 				return false;
 				case tileColors.door:
-					this.say("A door already exists in cordinates " + x + ", " + y + ".");
+					this.say("A door already exists in coordinates " + x + ", " + y + ".");
 				return false;
 				case tileColors.switch:
-					this.say("A switch already exists in cordinates " + x + ", " + y + ".");
+					this.say("A switch already exists in coordinates " + x + ", " + y + ".");
 				return false;
 			}
 			if (this.ghosts.length) {
 				for (const ghost of this.ghosts) {
 					if (x2 === ghost.row && y2 === ghost.column) {
-						this.say("A " + ghost.name + " already exists in cordinates " + x + ", " + y + ".");
+						this.say("A " + ghost.name + " already exists in coordinates " + x + ", " + y + ".");
 						return false;
 					}
 				}
@@ -1196,7 +1196,7 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 			const candyLocation = new CandyLocation();
 			this.candyLocations.push(candyLocation);
 			this.board[x2][y2] = candyLocation;
-			this.say("Candy spot was placed on the cordinates " + x + ", " + y + ".");
+			this.say("Candy spot was placed on the coordinates " + x + ", " + y + ".");
 			this.displayBoard();
 			return true;
 		},
@@ -1206,27 +1206,27 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 	createdoor: {
 		command(target, room, user, cmd) {
 			if (this.isPm(room) || !user.hasRank(room, 'voice')) return false;
-			const cordinates = target.split(',');
-			if (cordinates.length < 5) {
+			const coordinates = target.split(',');
+			if (coordinates.length < 5) {
 				this.say("Usage: " + Config.commandCharacter + cmd + " [door X], [door Y], [door number], [switch X], [switch Y]");
 				return false;
 			}
-			const doorX: number = parseInt(Tools.toId(cordinates[0]));
-			const doorY: number = parseInt(Tools.toId(cordinates[1]));
-			const num: number = parseInt(Tools.toId(cordinates[2]));
-			const switchX: number = parseInt(Tools.toId(cordinates[3]));
-			const switchY: number = parseInt(Tools.toId(cordinates[4]));
+			const doorX: number = parseInt(Tools.toId(coordinates[0]));
+			const doorY: number = parseInt(Tools.toId(coordinates[1]));
+			const num: number = parseInt(Tools.toId(coordinates[2]));
+			const switchX: number = parseInt(Tools.toId(coordinates[3]));
+			const switchY: number = parseInt(Tools.toId(coordinates[4]));
 
 			const doorX2: number = doorX - 1;
 			const doorY2: number = doorY - 1;
 			const switchX2: number = switchX - 1;
 			const switchY2: number = switchY - 1;
 			if (!doorX || !doorY || doorX2 > this.lastRowIndex || doorY2 > this.lastColumnIndex) {
-				this.say("Invalid door cordinates.");
+				this.say("Invalid door coordinates.");
 				return false;
 			}
 			if (!switchX || !switchY || switchX2 > this.lastRowIndex || switchY2 > this.lastColumnIndex) {
-				this.say("Invalid switch cordinates.");
+				this.say("Invalid switch coordinates.");
 				return false;
 			}
 			if (num > 9 || num < 1) {
@@ -1234,45 +1234,45 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 				return false;
 			}
 			if (doorX === switchX && doorY === switchY) {
-				this.say("The door and switch cannot have the same cordinates.");
+				this.say("The door and switch cannot have the same coordinates.");
 				return false;
 			}
 			switch (this.board[doorX2][doorY2].color) {
 				case tileColors.wall:
-					this.say("A wall already exists in cordinates " + doorX + ", " + doorY + ".");
+					this.say("A wall already exists in coordinates " + doorX + ", " + doorY + ".");
 				return false;
 				case tileColors.candy:
-					this.say("A candy spot already exists in cordinates " + doorX + ", " + doorY + ".");
+					this.say("A candy spot already exists in coordinates " + doorX + ", " + doorY + ".");
 				return false;
 				case tileColors.door:
-					this.say("A door already exists in cordinates " + doorX + ", " + doorY + ".");
+					this.say("A door already exists in coordinates " + doorX + ", " + doorY + ".");
 				return false;
 				case tileColors.switch:
-					this.say("A switch already exists in cordinates " + doorX + ", " + doorY + ".");
+					this.say("A switch already exists in coordinates " + doorX + ", " + doorY + ".");
 				return false;
 			}
 			switch (this.board[switchX2][switchY2].color) {
 				case tileColors.wall:
-					this.say("A wall already exists in cordinates " + switchX + ", " + switchY + ".");
+					this.say("A wall already exists in coordinates " + switchX + ", " + switchY + ".");
 				return false;
 				case tileColors.candy:
-					this.say("A candy spot already exists in cordinates " + switchX + ", " + switchY + ".");
+					this.say("A candy spot already exists in coordinates " + switchX + ", " + switchY + ".");
 				return false;
 				case tileColors.door:
-					this.say("A door already exists in cordinates " + switchX + ", " + switchY + ".");
+					this.say("A door already exists in coordinates " + switchX + ", " + switchY + ".");
 				return false;
 				case tileColors.switch:
-					this.say("A switch already exists in cordinates " + switchX + ", " + switchY + ".");
+					this.say("A switch already exists in coordinates " + switchX + ", " + switchY + ".");
 				return false;
 			}
 			if (this.ghosts.length) {
 				for (const ghost of this.ghosts) {
 					if (doorX2 === ghost.row && doorY2 === ghost.column) {
-						this.say("A " + ghost.name + " already exists in cordinates " + doorX + ", " + doorY + ".");
+						this.say("A " + ghost.name + " already exists in coordinates " + doorX + ", " + doorY + ".");
 						return false;
 					}
 					else if (switchX2 === ghost.row && switchY2 === ghost.column) {
-						this.say("A " + ghost.name + " already exists in cordinates " + switchX + ", " + switchY + ".");
+						this.say("A " + ghost.name + " already exists in coordinates " + switchX + ", " + switchY + ".");
 						return false;
 					}
 				}
@@ -1287,7 +1287,7 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 			}
 			this.board[doorX2][doorY2] = new Door(num);
 			this.board[switchX2][switchY2] = new Switch(this.board[doorX2][doorY2] as Door);
-			this.say("Door number " + num + " was placed on the cordinates " + doorX + ", " + doorY + ". Switch number " + num + " was placed on the cordinates " + switchX + ", " + switchY + ".");
+			this.say("Door number " + num + " was placed on the coordinates " + doorX + ", " + doorY + ". Switch number " + num + " was placed on the coordinates " + switchX + ", " + switchY + ".");
 			this.displayBoard();
 			return true;
 		},
