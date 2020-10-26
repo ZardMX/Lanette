@@ -563,15 +563,17 @@ class HauntersHauntedHouse extends ScriptedGame {
 
 	displayBoard(): void {
 		let html = '<div class="infobox"><font color="black"><table align="center" border="2">';
-		// const playerLocations: Dict<Player[]> = {};
-		// for (const id in this.players) {
-		// 	const player = this.players[id];
-		// 	if (player.eliminated) continue;
-		// 	const location = this.playerLocations.get(this.players[id])!;
-		// 	const coordinates = this.getTileCoordinates(location[0], location[1]);
-		// 	if (!(coordinates in playerLocations)) playerLocations[coordinates] = [];
-		// 	playerLocations[coordinates].push(player);
-		// }
+		const playerLocations: Dict<Player[]> = {};
+		if (this.started) {
+			for (const id in this.players) {
+				const player = this.players[id];
+				if (player.eliminated) continue;
+				const location = this.playerLocations.get(this.players[id])!;
+				const coordinates = this.getTileCoordinates(location[0], location[1]);
+				if (!(coordinates in playerLocations)) playerLocations[coordinates] = [];
+				playerLocations[coordinates].push(player);
+			}
+		}
 
 		const ghostLocations: Dict<string> = {};
 		for (const ghost of this.ghosts) {
@@ -595,17 +597,17 @@ class HauntersHauntedHouse extends ScriptedGame {
 					} else {
 						tileColor = Tools.hexColorCodes[tileColors.ghost]['background-color'];
 					}
-				} // else if (coordinates in playerLocations) {
-			// 		tileText = '<span title="' + playerLocations[coordinates].map(x => x.name).join(", ") + '">';
-			// 		// if (playerLocations[coordinates].length === 1) {
-			// 		// 	tileText += "P" + this.playerNumbers.get(playerLocations[coordinates][0]);
-			// 		// } else {
-			// 		// 	tileText += "*";
-			// 		// }
-			// 	// 	tileText += '</span>';
-			// 	// 	tileColor = Tools.hexColorCodes[tileColors.players]['background-color'];
-			// 	// }
-			//
+				} else if (this.started && coordinates in playerLocations) {
+					tileText = '<span title="' + playerLocations[coordinates].map(x => x.name).join(", ") + '">';
+					if (playerLocations[coordinates].length === 1) {
+						tileText += "P" + this.playerNumbers.get(playerLocations[coordinates][0]);
+					} else {
+						tileText += "*";
+					}
+					tileText += '</span>';
+					tileColor = Tools.hexColorCodes[tileColors.players]['background-color'];
+				}
+
 				html += '<td style=background-color:' + tileColor + '; width="20px"; height="20px"; align="center">' + tileText + '</td>';
 			}
 			html += '</tr>';
@@ -707,8 +709,8 @@ class HauntersHauntedHouse extends ScriptedGame {
 				this.lastRowIndex = this.boardSize - 1;
 				this.lastColumnIndex = this.boardSize - 1;
 				this.setupBoard();
-				this.setCandyLocations();
 			}
+			this.setCandyLocations();
 			startingLocation = [this.lastRowIndex, Math.floor(this.lastColumnIndex / 2)];
 			while (!this.board[startingLocation[0]][startingLocation[1]].canMoveThrough) {
 				startingLocation[1] = startingLocation[1] + 1;
@@ -1066,6 +1068,7 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 			return true;
 		},
 		signupsGameCommand: true,
+		aliases: ['cboard'],
 	},
 	createghost: {
 		command(target, room, user, cmd) {
@@ -1104,6 +1107,7 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 			return true;
 		},
 		signupsGameCommand: true,
+		aliases: ['cghost'],
 	},
 	createwall: {
 		command(target, room, user, cmd) {
@@ -1149,6 +1153,7 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 			return true;
 		},
 		signupsGameCommand: true,
+		aliases: ['cwall'],
 	},
 	createcandyspot: {
 		command(target, room, user, cmd) {
@@ -1196,6 +1201,7 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 			return true;
 		},
 		signupsGameCommand: true,
+		aliases: ['ccandy', 'createcandy'],
 	},
 	createdoor: {
 		command(target, room, user, cmd) {
@@ -1286,6 +1292,7 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 			return true;
 		},
 		signupsGameCommand: true,
+		aliases: ['cdoor'],
 	},
 	displayboard: {
 		command(target, room, user) {
@@ -1294,6 +1301,7 @@ const commands: GameCommandDefinitions<HauntersHauntedHouse> = {
 			return true;
 		},
 		signupsGameCommand: true,
+		aliases: ['board'],
 	}
 };
 
