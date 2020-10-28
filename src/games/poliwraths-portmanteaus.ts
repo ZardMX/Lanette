@@ -160,7 +160,7 @@ export const game: IGameFile<PoliwrathsPortmanteaus> = Games.copyTemplatePropert
 	},
 	class: PoliwrathsPortmanteaus,
 	customizableOptions: {
-		ports: {min: 2, base: BASE_NUMBER_OF_PORTS, max: 4},
+		ports: {min: 2, base: BASE_NUMBER_OF_PORTS, max: 10},
 		points: {min: 5, base: 5, max: 10},
 		teamPoints: {min: 10, base: 10, max: 10},
 	},
