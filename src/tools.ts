@@ -386,7 +386,7 @@ export class Tools {
 		const roundingBoundaries = [6, 15, 12, 30, 30];
 		const unitNames = ["year", "month", "day", "hour", "minute", "second"];
 		const positiveIndex = parts.findIndex(elem => elem > 0);
-		const precision = (options && options.precision ? options.precision : parts.length);
+		const precision = options && options.precision ? options.precision : parts.length;
 		if (options && options.hhmmss) {
 			const joined = parts.slice(positiveIndex).map(value => value < 10 ? "0" + value : "" + value).join(":");
 			return joined.length === 2 ? "00:" + joined : joined;
@@ -561,10 +561,10 @@ export class Tools {
 		return combinations;
 	}
 
-	async fetchUrl(url: string): Promise<string | Error> {
+	async fetchUrl(urlToFetch: string): Promise<string | Error> {
 		return new Promise(resolve => {
 			let data = '';
-			const request = https.get(url, res => {
+			const request = https.get(urlToFetch, res => {
 				res.setEncoding('utf8');
 				res.on('data', chunk => data += chunk);
 				res.on('end', () => {
@@ -674,8 +674,8 @@ export class Tools {
 
 		const formatting: string[] = ["**", "__", "``"];
 		for (const format of formatting) {
-			const index = challongeLink.lastIndexOf(format);
-			if (index !== -1) challongeLink = challongeLink.substr(0, index);
+			const formatIndex = challongeLink.lastIndexOf(format);
+			if (formatIndex !== -1) challongeLink = challongeLink.substr(0, formatIndex);
 		}
 
 		while (challongeLink.endsWith('!') || challongeLink.endsWith('.') || challongeLink.endsWith("'") || challongeLink.endsWith('"') ||
@@ -685,9 +685,8 @@ export class Tools {
 		return challongeLink;
 	}
 
-	editGist(gistId: string, description: string, files: Dict<{filename: string; content: string}>): void {
+	editGist(username: string, token: string, gistId: string, description: string, files: Dict<{filename: string; content: string}>): void {
 		if (this.lastGithubApiCall && (Date.now() - this.lastGithubApiCall) < githubApiThrottle) return;
-		if (!Config.githubApiCredentials || !Config.githubApiCredentials.gist) return;
 
 		const patchData = JSON.stringify({
 			description,
@@ -708,8 +707,8 @@ export class Tools {
 				'Accept': 'application/vnd.github.v3+json',
 				'Content-Type': 'application/json; charset=utf-8',
 				'Content-Length': patchData.length,
-				'User-Agent': Config.githubApiCredentials.gist.username,
-				'Authorization': 'token ' + Config.githubApiCredentials.gist.token,
+				'User-Agent': username,
+				'Authorization': 'token ' + token,
 			},
 		};
 
@@ -753,20 +752,10 @@ export class Tools {
 		fs.writeFileSync(tempFilepath, data);
 		fs.renameSync(tempFilepath, filepath);
 	}
-
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	/*
-	async runUpdatePS(user?: User): Promise<any> {
-		await exec('node update-ps.js --hotpatch');
-
-		if (!user) user = Users.self;
-		await CommandParser.parse(user, user, Config.commandCharacter + 'reload dex');
-	}
-	*/
 }
 
 export const instantiate = (): void => {
-	const oldTools: Tools | undefined = global.Tools;
+	const oldTools = global.Tools as Tools | undefined;
 
 	global.Tools = new Tools();
 
