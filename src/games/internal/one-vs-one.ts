@@ -5,10 +5,10 @@ import type { IGameFile, IGameFormat } from "../../types/games";
 import type { User } from "../../users";
 
 export class OneVsOne extends ScriptedGame {
-	challenger: Player | null = null;
-	challengerPromotedName: string = '';
-	defender: Player | null = null;
-	defenderPromotedName: string = '';
+	leftPlayer: Player | null = null;
+	leftPlayerPromotedName: string = '';
+	rightPlayer: Player | null = null;
+	rightPlayerPromotedName: string = '';
 	internalGame: boolean = true;
 	noForceEndMessage: boolean = true;
 	originalModchat: string = '';
@@ -18,18 +18,18 @@ export class OneVsOne extends ScriptedGame {
 
 	room!: Room;
 
-	setupChallenge(challenger: User, defender: User, challengeFormat: IGameFormat): void {
+	setupChallenge(leftPlayer: User, rightPlayer: User, challengeFormat: IGameFormat): void {
 		this.challengeFormat = challengeFormat;
-		this.defender = this.createPlayer(defender)!;
-		this.challenger = this.createPlayer(challenger)!;
+		this.rightPlayer = this.createPlayer(rightPlayer)!;
+		this.leftPlayer = this.createPlayer(leftPlayer)!;
 		this.minPlayers = 2;
 		this.name += " (" + challengeFormat.name + ")";
 
-		const text = this.challenger.name + " challenges " + this.defender.name + " to a one vs. one game of " +
+		const text = this.leftPlayer.name + " challenges " + this.rightPlayer.name + " to a one vs. one game of " +
 			challengeFormat.nameWithOptions + "!";
 		this.on(text, () => {
 			this.timeout = setTimeout(() => {
-				this.say(this.defender!.name + " failed to accept the challenge in time!");
+				this.say(this.rightPlayer!.name + " failed to accept the challenge in time!");
 				this.forceEnd(Users.self);
 			}, 2 * 60 * 1000);
 		});
@@ -37,14 +37,14 @@ export class OneVsOne extends ScriptedGame {
 	}
 
 	acceptChallenge(user: User): boolean {
-		if (this.started || !this.defender || !this.challenger) return false;
-		if (user.id !== this.defender.id) {
+		if (this.started || !this.rightPlayer || !this.leftPlayer) return false;
+		if (user.id !== this.rightPlayer.id) {
 			user.say("You are not the defender in the current one vs. one challenge.");
 			return false;
 		}
 
-		const challenger = Users.get(this.challenger.name);
-		if (!challenger) {
+		const leftPlayer = Users.get(this.leftPlayer.name);
+		if (!leftPlayer) {
 			this.say("The challenger must be in the room for the challenge to begin.");
 			return false;
 		}
@@ -55,11 +55,11 @@ export class OneVsOne extends ScriptedGame {
 		this.say("/modchat +");
 		if (!user.hasRank(this.room, 'voice')) {
 			this.say("/roomvoice " + user.name);
-			this.defenderPromotedName = user.id;
+			this.rightPlayerPromotedName = user.id;
 		}
-		if (!challenger.hasRank(this.room, 'voice')) {
-			this.say("/roomvoice " + challenger.name);
-			this.challengerPromotedName = challenger.id;
+		if (!leftPlayer.hasRank(this.room, 'voice')) {
+			this.say("/roomvoice " + leftPlayer.name);
+			this.leftPlayerPromotedName = leftPlayer.id;
 		}
 
 		this.start();
@@ -67,8 +67,8 @@ export class OneVsOne extends ScriptedGame {
 	}
 
 	rejectChallenge(user: User): boolean {
-		if (this.started || !this.defender) return false;
-		if (user.id !== this.defender.id) {
+		if (this.started || !this.rightPlayer) return false;
+		if (user.id !== this.rightPlayer.id) {
 			user.say("You are not the defender in the current one vs. one challenge.");
 			return false;
 		}
@@ -78,8 +78,8 @@ export class OneVsOne extends ScriptedGame {
 	}
 
 	cancelChallenge(user: User): boolean {
-		if (this.started || !this.challenger) return false;
-		if (user.id !== this.challenger.id) {
+		if (this.started || !this.leftPlayer) return false;
+		if (user.id !== this.leftPlayer.id) {
 			user.say("You are not the challenger in the current one vs. one challenge.");
 			return false;
 		}
@@ -93,15 +93,15 @@ export class OneVsOne extends ScriptedGame {
 	}
 
 	onNextRound(): void {
-		if (!this.challenger || !this.defender) throw new Error("nextRound() called without challenger and defender");
+		if (!this.leftPlayer || !this.rightPlayer) throw new Error("nextRound() called without leftPlayer and rightPlayer");
 
-		if (this.defender.eliminated) {
-			this.say(this.defender.name + " has left the game!");
+		if (this.rightPlayer.eliminated) {
+			this.say(this.rightPlayer.name + " has left the game!");
 			this.timeout = setTimeout(() => this.end(), 5 * 1000);
 			return;
 		}
-		if (this.challenger.eliminated) {
-			this.say(this.challenger.name + " has left the game!");
+		if (this.leftPlayer.eliminated) {
+			this.say(this.leftPlayer.name + " has left the game!");
 			this.timeout = setTimeout(() => this.end(), 5 * 1000);
 			return;
 		}
@@ -128,18 +128,18 @@ export class OneVsOne extends ScriptedGame {
 	}
 
 	onChildEnd(winners: Map<Player, number>): void {
-		if (!this.challenger || !this.defender) throw new Error("onChildEnd() called without challenger and defender");
+		if (!this.leftPlayer || !this.rightPlayer) throw new Error("onChildEnd() called without leftPlayer and rightPlayer");
 
-		const defenderPoints = winners.get(this.defender) || 0;
-		const challengerPoints = winners.get(this.challenger) || 0;
-		this.defender.reset();
-		this.challenger.reset();
+		const rightPlayerPoints = winners.get(this.rightPlayer) || 0;
+		const leftPlayerPoints = winners.get(this.leftPlayer) || 0;
+		this.rightPlayer.reset();
+		this.leftPlayer.reset();
 
 		let winner;
-		if (defenderPoints > challengerPoints) {
-			winner = this.defender;
-		} else if (challengerPoints > defenderPoints) {
-			winner = this.challenger;
+		if (rightPlayerPoints > leftPlayerPoints) {
+			winner = this.rightPlayer;
+		} else if (leftPlayerPoints > rightPlayerPoints) {
+			winner = this.leftPlayer;
 		}
 
 		if (winner) {
@@ -153,24 +153,24 @@ export class OneVsOne extends ScriptedGame {
 
 	resetModchatAndRanks(): void {
 		this.say("/modchat " + this.originalModchat);
-		if (this.challengerPromotedName) this.say("/roomdeauth " + this.challengerPromotedName);
-		if (this.defenderPromotedName) this.say("/roomdeauth " + this.defenderPromotedName);
+		if (this.leftPlayerPromotedName) this.say("/roomdeauth " + this.leftPlayerPromotedName);
+		if (this.rightPlayerPromotedName) this.say("/roomdeauth " + this.rightPlayerPromotedName);
 	}
 
 	updateLastChallengeTime(): void {
-		if (!this.challenger) return;
+		if (!this.leftPlayer) return;
 
 		if (!(this.room.id in Games.lastOneVsOneChallengeTimes)) Games.lastOneVsOneChallengeTimes[this.room.id] = {};
-		Games.lastOneVsOneChallengeTimes[this.room.id][this.challenger.id] = Date.now();
+		Games.lastOneVsOneChallengeTimes[this.room.id][this.leftPlayer.id] = Date.now();
 	}
 
 	onEnd(): void {
-		if (!this.challenger || !this.defender) throw new Error("onEnd() called without challenger and defender");
+		if (!this.leftPlayer || !this.rightPlayer) throw new Error("onEnd() called without leftPlayer and rightPlayer");
 
-		if (this.challenger.eliminated || this.defender === this.winner) {
-			this.say(this.defender.name + " has won the challenge!");
-		} else if (this.defender.eliminated || this.challenger === this.winner) {
-			this.say(this.challenger.name + " has won the challenge!");
+		if (this.leftPlayer.eliminated || this.rightPlayer === this.winner) {
+			this.say(this.rightPlayer.name + " has won the challenge!");
+		} else if (this.rightPlayer.eliminated || this.leftPlayer === this.winner) {
+			this.say(this.leftPlayer.name + " has won the challenge!");
 		}
 
 		this.resetModchatAndRanks();
@@ -179,9 +179,19 @@ export class OneVsOne extends ScriptedGame {
 
 	onForceEnd(user?: User): void {
 		this.resetModchatAndRanks();
-		if (user && this.challenger && user.id === this.challenger.id) {
+		if (user && this.leftPlayer && user.id === this.leftPlayer.id) {
 			this.updateLastChallengeTime();
 		}
+	}
+
+	getLeftPlayer(): Player {
+		if (!this.leftPlayer) throw new Error("getLeftPlayer() called without left player");
+		return this.leftPlayer;
+	}
+
+	getRightPlayer(): Player {
+		if (!this.rightPlayer) throw new Error("getRightPlayer() called without right player");
+		return this.rightPlayer;
 	}
 }
 

@@ -282,7 +282,7 @@ export class ScriptedGame extends Game {
 	}
 
 	start(): boolean {
-		if (this.minPlayers && this.playerCount < this.minPlayers) return false;
+		// if (this.minPlayers && this.playerCount < this.minPlayers) return false;
 
 		if (this.startTimer) clearTimeout(this.startTimer);
 		this.started = true;
@@ -769,6 +769,8 @@ export class ScriptedGame extends Game {
 	acceptChallenge?(user: User): boolean;
 	cancelChallenge?(user: User): boolean;
 	cleanupTimers?(): void;
+	getLeftPlayer?(): Player;
+	getRightPlayer?(): Player;
 	getForceEndMessage?(): string;
 	getPlayerSummary?(player: Player): void;
 	async getRandomAnswer?(): Promise<IRandomGameAnswer>;

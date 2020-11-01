@@ -25,6 +25,7 @@ class AmbipomsTossups extends QuestionAndAnswer {
 	scaleMaxRevealedLetters: boolean = false;
 	tossupRound: number = 0;
 	updateHintTime: number = 5 * 1000;
+	guessed1v1: boolean = false;
 
 	static loadData(): void {
 		data["Pokemon"] = Games.getPokemonList().filter(x => x.name.length < 18).map(x => x.name);
@@ -67,12 +68,19 @@ class AmbipomsTossups extends QuestionAndAnswer {
 		}
 
 		this.hint = "<b>" + this.currentCategory + "</b> | " + this.hints.join(" ");
+		if (this.parentGame && this.parentGame.getRightPlayer && this.parentGame.getLeftPlayer) {
+			if (this.roundGuesses.has(this.parentGame.getRightPlayer()) && this.roundGuesses.has(this.parentGame.getLeftPlayer())) this.guessed1v1 = true;
+		}
 	}
 
 	onHintHtml(): void {
-		if (this.revealedLetters >= this.letterCount || (this.maxRevealedLetters && this.revealedLetters >= this.maxRevealedLetters)) {
-			const text = (this.maxRevealedLetters ? "The maximum number of" : "All possible") + " letters have been revealed! " +
+		if (this.revealedLetters >= this.letterCount || (this.maxRevealedLetters && this.revealedLetters >= this.maxRevealedLetters) || this.guessed1v1) {
+			let text = (this.maxRevealedLetters ? "The maximum number of" : "All possible") + " letters have been revealed! " +
 				this.getAnswers('');
+			if (this.guessed1v1) {
+				text = "Both players have made their guess! " + this.getAnswers('');
+				this.guessed1v1 = false;
+			}
 			this.on(text, () => {
 				this.answers = [];
 				if (this.isMiniGame) {

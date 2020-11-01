@@ -146,6 +146,16 @@ export class HeadToHead extends ScriptedGame {
 	onForceEnd(): void {
 		this.resetModchatAndRanks();
 	}
+
+	getLeftPlayer(): Player {
+		if (!this.leftPlayer) throw new Error("getLeftPlayer() called without left player");
+		return this.leftPlayer;
+	}
+
+	getRightPlayer(): Player {
+		if (!this.rightPlayer) throw new Error("getRightPlayer() called without right player");
+		return this.rightPlayer;
+	}
 }
 
 export const game: IGameFile<HeadToHead> = {

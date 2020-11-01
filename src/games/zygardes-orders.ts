@@ -36,6 +36,7 @@ class ZygardesOrders extends QuestionAndAnswer {
 	scaleMaxRevealedLetters: boolean = false;
 	solvedLetters: string[] = [];
 	updateHintTime = 5 * 1000;
+	guessed1v1: boolean = false;
 
 	static loadData(): void {
 		data["Characters"] = Dex.getCharacters().filter(x => x.length < 18);
@@ -96,14 +97,21 @@ class ZygardesOrders extends QuestionAndAnswer {
 				this.revealedLetters = this.allLetters;
 			}
 		}
+		if (this.parentGame && this.parentGame.getRightPlayer && this.parentGame.getLeftPlayer) {
+			if (this.roundGuesses.has(this.parentGame.getRightPlayer()) && this.roundGuesses.has(this.parentGame.getLeftPlayer())) this.guessed1v1 = true;
+		}
 
 		this.hint = "<b>" + this.currentCategory + "</b> | " + this.hints.join("");
 	}
 
 	onHintHtml(): void {
-		if (this.revealedLetters >= this.allLetters || (this.maxRevealedLetters && this.revealedLetters >= this.maxRevealedLetters)) {
-			const text = (this.maxRevealedLetters ? "The maximum number of" : "All possible") + " letters have been revealed! " +
+		if (this.revealedLetters >= this.allLetters || (this.maxRevealedLetters && this.revealedLetters >= this.maxRevealedLetters) || this.guessed1v1) {
+			let text = (this.maxRevealedLetters ? "The maximum number of" : "All possible") + " letters have been revealed! " +
 				this.getAnswers('');
+				if (this.guessed1v1) {
+					text = "Both players have made their guess! " + this.getAnswers('');
+					this.guessed1v1 = false;
+				}
 			this.on(text, () => {
 				this.answers = [];
 				if (this.isMiniGame) {
