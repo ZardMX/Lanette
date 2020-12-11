@@ -3,10 +3,9 @@ import https = require('https');
 import path = require('path');
 import url = require('url');
 
-import type { PRNG } from './prng';
-import type { IFormatThread } from './types/dex';
-import type { HexColor } from './types/tools';
-import type { IParam } from './workers/parameters';
+import type { PRNG } from './lib/prng';
+import type { HexColor, IParsedSmogonLink } from './types/tools';
+import type { IParam, IParametersGenData, ParametersSearchType } from './workers/parameters';
 
 const ALPHA_NUMERIC_REGEX = /[^a-zA-Z0-9 ]/g;
 const ID_REGEX = /[^a-z0-9]/g;
@@ -20,8 +19,9 @@ const UNSAFE_API_CHARACTER_REGEX = /[^A-Za-z0-9 ,.%&'"!?()[\]`_<>/|:;=+-@]/g;
 const BATTLE_ROOM_PREFIX = 'battle-';
 const GROUPCHAT_PREFIX = 'groupchat-';
 const SMOGON_DEX_PREFIX = 'https://www.smogon.com/dex/';
-const SMOGON_FORUM_PREFIX = 'https://www.smogon.com/forums/threads/';
-const SMOGON_FORUM_POST_PREFIX = "post-";
+const SMOGON_THREADS_PREFIX = 'https://www.smogon.com/forums/threads/';
+const SMOGON_POSTS_PREFIX = 'https://www.smogon.com/forums/posts/';
+const SMOGON_POST_PERMALINK_PREFIX = "post-";
 const maxMessageLength = 300;
 const maxUsernameLength = 18;
 const githubApiThrottle = 2 * 1000;
@@ -30,48 +30,73 @@ const rootFolder = path.resolve(__dirname, '..');
 // eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/no-empty-function
 const TimeoutConstructor = setTimeout(() => {}, 1).constructor;
 
-const hexColorCodes: KeyedDict<HexColor, {'background-color': string; 'background': string; 'border-color': string}> = {
-	"White": {'background-color': '#eeeeee', 'background': 'linear-gradient(#eeeeee, #dddddd)', 'border-color': '#222222'},
-	"Black": {'background-color': '#222222', 'background': 'linear-gradient(#222222, #111111)', 'border-color': '#eeeeee'},
-	"Dark Yellow": {'background-color': '#8A8A59', 'background': 'linear-gradient(#A8A878,#8A8A59)', 'border-color': '#79794E'},
-	"Orange": {'background-color': '#F08030', 'background': 'linear-gradient(#F08030,#DD6610)', 'border-color': '#B4530D'},
-	"Blue": {'background-color': '#6890F0', 'background': 'linear-gradient(#6890F0,#386CEB)', 'border-color': '#1753E3'},
-	"Yellow": {'background-color': '#F8D030', 'background': 'linear-gradient(#F8D030,#F0C108)', 'border-color': '#C19B07'},
-	"Light Pink": {'background-color': '#F830D0', 'background': 'linear-gradient(#F830D0,#F008C1)', 'border-color': '#C1079B'},
-	"Green": {'background-color': '#78C850', 'background': 'linear-gradient(#78C850,#5CA935)', 'border-color': '#4A892B'},
-	"Light Blue": {'background-color': '#98D8D8', 'background': 'linear-gradient(#98D8D8,#69C6C6)', 'border-color': '#45B6B6'},
-	"Red": {'background-color': '#C03028', 'background': 'linear-gradient(#C03028,#9D2721)', 'border-color': '#82211B'},
-	"Dark Pink": {'background-color': '#A040A0', 'background': 'linear-gradient(#A040A0,#803380)', 'border-color': '#662966'},
-	"Light Brown": {'background-color': '#E0C068', 'background': 'linear-gradient(#E0C068,#D4A82F)', 'border-color': '#AA8623'},
-	"Light Purple": {'background-color': '#A890F0', 'background': 'linear-gradient(#A890F0,#9180C4)', 'border-color': '#7762B6'},
-	"Pink": {'background-color': '#F85888', 'background': 'linear-gradient(#F85888,#F61C5D)', 'border-color': '#D60945'},
-	"Light Green": {'background-color': '#A8B820', 'background': 'linear-gradient(#A8B820,#8D9A1B)', 'border-color': '#616B13'},
-	"Brown": {'background-color': '#B8A038', 'background': 'linear-gradient(#B8A038,#93802D)', 'border-color': '#746523'},
-	"Dark Purple": {'background-color': '#705898', 'background': 'linear-gradient(#705898,#554374)', 'border-color': '#413359'},
-	"Purple": {'background-color': '#7038F8', 'background': 'linear-gradient(#7038F8,#4C08EF)', 'border-color': '#3D07C0'},
-	"Light Gray": {'background-color': '#B8B8D0', 'background': 'linear-gradient(#B8B8D0,#9797BA)', 'border-color': '#7A7AA7'},
-	"Dark Brown": {'background-color': '#705848', 'background': 'linear-gradient(#705848,#513F34)', 'border-color': '#362A23'},
+const hexColorCodes: KeyedDict<HexColor, {'background-color': string; 'background': string}> = {
+	"Red": {'background-color': '#db7070', 'background': 'linear-gradient(#db7070,#b82e2e)'},
+	"Red-Orange": {'background-color': '#db8b70', 'background': 'linear-gradient(#db8b70,#b8502e)'},
+	"Orange": {'background-color': '#dba670', 'background': 'linear-gradient(#dba670,#b8732e)'},
+	"Yellow-Orange": {'background-color': '#dbc170', 'background': 'linear-gradient(#dbc170,#b8952e)'},
+	"Yellow": {'background-color': '#dbdb70', 'background': 'linear-gradient(#dbdb70,#b8b82e)'},
+	"Yellow-Green": {'background-color': '#c1db70', 'background': 'linear-gradient(#c1db70,#95b82e)'},
+	"Green": {'background-color': '#70db70', 'background': 'linear-gradient(#70db70,#2eb82e)'},
+	"Cyan": {'background-color': '#70dbdb', 'background': 'linear-gradient(#70dbdb,#2eb8b8)'},
+	"Blue": {'background-color': '#70a6db', 'background': 'linear-gradient(#70a6db,#2e73b8)'},
+	"Blue-Violet": {'background-color': '#7070db', 'background': 'linear-gradient(#7070db,#2e2eb8)'},
+	"Violet": {'background-color': '#a670db', 'background': 'linear-gradient(#a670db,#732eb8)'},
+	"Pink": {'background-color': '#db70db', 'background': 'linear-gradient(#db70db,#b82eb8)'},
+	"Red-Violet": {'background-color': '#db70a6', 'background': 'linear-gradient(#db70a6,#b82e73)'},
+	"Brown": {'background-color': '#c68353', 'background': 'linear-gradient(#c68353,#995e33)'},
+	"Black": {'background-color': '#262626', 'background': 'linear-gradient(#262626,#1a1a1a)'},
+	"White": {'background-color': '#e6e6e6', 'background': 'linear-gradient(#e6e6e6,#d9d9d9)'},
+	"Gray": {'background-color': '#999999', 'background': 'linear-gradient(#999999,#666666)'},
+	"Light-Red": {'background-color': '#ec9393', 'background': 'linear-gradient(#ec9393,#e05252)'},
+	"Light-Red-Orange": {'background-color': '#eca993', 'background': 'linear-gradient(#eca993,#e07552)'},
+	"Light-Orange": {'background-color': '#ecbf93', 'background': 'linear-gradient(#ecbf93,#e09952)'},
+	"Light-Yellow-Orange": {'background-color': '#ecd693', 'background': 'linear-gradient(#ecd693,#e0bd52)'},
+	"Light-Yellow": {'background-color': '#ecec93', 'background': 'linear-gradient(#ecec93,#e0e052)'},
+	"Light-Yellow-Green": {'background-color': '#d6ec93', 'background': 'linear-gradient(#d6ec93,#bde052)'},
+	"Light-Green": {'background-color': '#93ec93', 'background': 'linear-gradient(#93ec93,#52e052)'},
+	"Light-Cyan": {'background-color': '#93ecec', 'background': 'linear-gradient(#93ecec,#52e0e0)'},
+	"Light-Blue": {'background-color': '#93bfec', 'background': 'linear-gradient(#93bfec,#5299e0)'},
+	"Light-Blue-Violet": {'background-color': '#9393ec', 'background': 'linear-gradient(#9393ec,#5252e0)'},
+	"Light-Violet": {'background-color': '#bf93ec', 'background': 'linear-gradient(#bf93ec,#9952e0)'},
+	"Light-Pink": {'background-color': '#ec93ec', 'background': 'linear-gradient(#ec93ec,#e052e0)'},
+	"Light-Red-Violet": {'background-color': '#ec93bf', 'background': 'linear-gradient(#ec93bf,#e05299)'},
+	"Light-Brown": {'background-color': '#e6c8b3', 'background': 'linear-gradient(#e6c8b3,#d29e79)'},
+	"Light-Gray": {'background-color': '#bfbfbf', 'background': 'linear-gradient(#bfbfbf,#a6a6a6)'},
+	"Dark-Red": {'background-color': '#ac3939', 'background': 'linear-gradient(#ac3939,#732626)'},
+	"Dark-Red-Orange": {'background-color': '#ac5639', 'background': 'linear-gradient(#ac5639,#733926)'},
+	"Dark-Yellow": {'background-color': '#acac39', 'background': 'linear-gradient(#acac39,#737326)'},
+	"Dark-Yellow-Green": {'background-color': '#8fac39', 'background': 'linear-gradient(#8fac39,#607326)'},
+	"Dark-Green": {'background-color': '#39ac39', 'background': 'linear-gradient(#39ac39,#267326)'},
+	"Dark-Cyan": {'background-color': '#39acac', 'background': 'linear-gradient(#39acac,#267373)'},
+	"Dark-Blue": {'background-color': '#3973ac', 'background': 'linear-gradient(#3973ac,#264d73)'},
+	"Dark-Blue-Violet": {'background-color': '#3939ac', 'background': 'linear-gradient(#3939ac,#262673)'},
+	"Dark-Violet": {'background-color': '#7339ac', 'background': 'linear-gradient(#7339ac,#4d2673)'},
+	"Dark-Pink": {'background-color': '#ac39ac', 'background': 'linear-gradient(#ac39ac,#732673)'},
+	"Dark-Red-Violet": {'background-color': '#ac3973', 'background': 'linear-gradient(#ac3973,#73264d)'},
+	"Dark-Brown": {'background-color': '#995c33', 'background': 'linear-gradient(#995c33,#603920)'},
+	"Dark-Gray": {'background-color': '#595959', 'background': 'linear-gradient(#595959,#404040)'},
 };
 
 const typeHexColors: Dict<HexColor> = {
-	"Normal": "Dark Yellow",
-	"Fire": "Orange",
+	"Normal": "White",
+	"Fire": "Red-Orange",
 	"Water": "Blue",
 	"Electric": "Yellow",
-	"Fairy": "Light Pink",
+	"Fairy": "Light-Red-Violet",
 	"Grass": "Green",
-	"Ice": "Light Blue",
-	"Fighting": "Red",
-	"Poison": "Dark Pink",
-	"Ground": "Light Brown",
-	"Flying": "Light Purple",
+	"Ice": "Light-Cyan",
+	"Fighting": "Dark-Red",
+	"Poison": "Violet",
+	"Ground": "Light-Brown",
+	"Flying": "Light-Gray",
 	"Psychic": "Pink",
-	"Bug": "Light Green",
+	"Bug": "Yellow-Green",
 	"Rock": "Brown",
-	"Ghost": "Dark Purple",
-	"Dragon": "Purple",
-	"Steel": "Light Gray",
-	"Dark": "Dark Brown",
+	"Ghost": "Dark-Violet",
+	"Dragon": "Blue-Violet",
+	"Steel": "Gray",
+	"Dark": "Black",
 	"???": "White",
 	"Bird": "White",
 };
@@ -79,18 +104,37 @@ const typeHexColors: Dict<HexColor> = {
 const pokemonColorHexColors: Dict<HexColor> = {
 	"Green": "Green",
 	"Red": "Red",
-	"Black": "Dark Brown",
+	"Black": "Black",
 	"Blue": "Blue",
-	"White": "Light Gray",
+	"White": "White",
 	"Brown": "Brown",
 	"Yellow": "Yellow",
-	"Purple": "Dark Pink",
+	"Purple": "Violet",
 	"Pink": "Pink",
-	"Gray": "Dark Yellow",
+	"Gray": "Gray",
+};
+
+const eggGroupHexColors: Dict<HexColor> = {
+	"Monster": "Red",
+	"Grass": "Green",
+	"Dragon": "Blue-Violet",
+	"Water 1": "Light-Blue",
+	"Water 2": "Blue",
+	"Water 3": "Dark-Blue",
+	"Bug": "Yellow-Green",
+	"Flying": "Light-Violet",
+	"Field": "Light-Yellow-Orange",
+	"Fairy": "Light-Red-Violet",
+	"Undiscovered": "Black",
+	"Human-Like": "Light-Brown",
+	"Mineral": "Dark-Brown",
+	"Amorphous": "Gray",
+	"Ditto": "Pink",
 };
 
 export class Tools {
 	// exported constants
+	readonly eggGroupHexColors: typeof eggGroupHexColors = eggGroupHexColors;
 	readonly hexColorCodes: typeof hexColorCodes = hexColorCodes;
 	readonly typeHexColors: typeof typeHexColors = typeHexColors;
 	readonly pokemonColorHexColors: typeof pokemonColorHexColors = pokemonColorHexColors;
@@ -104,8 +148,9 @@ export class Tools {
 	readonly battleRoomPrefix: string = BATTLE_ROOM_PREFIX;
 	readonly groupchatPrefix: string = GROUPCHAT_PREFIX;
 	readonly smogonDexPrefix: string = SMOGON_DEX_PREFIX;
-	readonly smogonForumPrefix: string = SMOGON_FORUM_PREFIX;
-	readonly smogonForumPostPrefix: string = SMOGON_FORUM_POST_PREFIX;
+	readonly smogonThreadsPrefix: string = SMOGON_THREADS_PREFIX;
+	readonly smogonPostsPrefix: string = SMOGON_POSTS_PREFIX;
+	readonly smogonPostPermalinkPrefix: string = SMOGON_POST_PERMALINK_PREFIX;
 
 	lastGithubApiCall: number = 0;
 
@@ -116,6 +161,17 @@ export class Tools {
 			// @ts-expect-error
 			delete previous[i];
 		}
+	}
+
+	logError(error: Error): void {
+		const date = new Date();
+		const month = date.getMonth() + 1;
+		const day = date.getDate();
+		const year = date.getFullYear();
+		const filepath = year + '-' + month + '-' + day + '.txt';
+
+		fs.appendFileSync(path.join(rootFolder, 'errors', filepath), date.toUTCString() + " " + date.toTimeString() + "\n" +
+			(error.stack || error.message) + "\n");
 	}
 
 	random(limit?: number, prng?: PRNG): number {
@@ -247,13 +303,38 @@ export class Tools {
 		return temp;
 	}
 
-	intersectParams(params: IParam[], dexes: Dict<Dict<readonly string[]>>): string[] {
-		let intersection: string[] = dexes[params[0].type][params[0].param].slice();
+	intersectParams(paramsType: ParametersSearchType, params: IParam[], parametersData: DeepImmutableObject<IParametersGenData>): string[] {
+		let tierSearch = false;
+		for (const param of params) {
+			if (param.type === 'tier') {
+				tierSearch = true;
+				break;
+			}
+		}
+
+		let intersection: string[] = parametersData.paramTypeDexes[params[0].type][params[0].param].slice();
 		for (let i = 1; i < params.length; i++) {
-			intersection = this.intersectArrays(intersection, dexes[params[i].type][params[i].param]);
+			intersection = this.intersectArrays(intersection, parametersData.paramTypeDexes[params[i].type][params[i].param]);
 			if (!intersection.length) break;
 		}
-		return intersection;
+
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+		if (paramsType === 'pokemon') {
+			const filtered: string[] = [];
+			for (const slice of intersection) {
+				const id = this.toId(slice);
+				const isRegionalForm = (parametersData.formes[id] === 'Galar' || parametersData.formes[id] === 'Alola') &&
+					slice !== "Pikachu-Alola";
+				if (!isRegionalForm && id in parametersData.otherFormes &&
+					intersection.includes(parametersData.otherFormes[id])) continue;
+				if (parametersData.gigantamax.includes(slice) && !tierSearch) continue;
+				filtered.push(id);
+			}
+
+			intersection = filtered;
+		}
+
+		return intersection.sort();
 	}
 
 	toId(input: string | number | {id: string} | undefined): string {
@@ -483,7 +564,7 @@ export class Tools {
 			const filepath = filepaths[0];
 			filepaths.shift();
 			if (filepath in require.cache) {
-				const cachedModule = require.cache[filepath];
+				const cachedModule = require.cache[filepath]!;
 				for (const child of cachedModule.children) {
 					if (!child.id.endsWith('.node')) filepaths.push(child.filename);
 				}
@@ -594,38 +675,73 @@ export class Tools {
 		return {away, status, username};
 	}
 
-	parseFormatThread(thread: string): IFormatThread {
-		const parsedThread: IFormatThread = {description: '', id: ''};
+	parseSmogonLink(thread: string): IParsedSmogonLink | null {
+		const parsedThread: IParsedSmogonLink = {description: '', link: ''};
+		let id = thread;
 		if (thread.startsWith('&bullet;') && thread.includes('<a href="')) {
 			parsedThread.description = thread.split('</a>')[0].split('">')[1].trim();
-
-			let id = thread.split('<a href="')[1].split('">')[0].trim();
-			if (id.endsWith('/')) id = id.substr(0, id.length - 1);
-			const parts = id.split('/');
-			const lastPart = parts[parts.length - 1];
-			if (lastPart.startsWith(SMOGON_FORUM_POST_PREFIX) || lastPart.startsWith("#" + SMOGON_FORUM_POST_PREFIX)) {
-				parsedThread.id = parts[parts.length - 2] + '/' + lastPart;
-			} else {
-				parsedThread.id = lastPart;
-			}
+			id = thread.split('<a href="')[1].split('">')[0].trim();
 		}
-		return parsedThread;
+
+		if (id.endsWith('/')) id = id.substr(0, id.length - 1);
+		parsedThread.link = id;
+		const parts = id.split('/');
+		const lastPart = parts[parts.length - 1];
+		if (id.startsWith(SMOGON_DEX_PREFIX)) {
+			parsedThread.dexPage = id;
+			return parsedThread;
+		} else if (id.startsWith(SMOGON_POSTS_PREFIX)) {
+			parsedThread.postId = lastPart;
+			return parsedThread;
+		} else if (id.startsWith(SMOGON_THREADS_PREFIX)) {
+			if (lastPart.startsWith(SMOGON_POST_PERMALINK_PREFIX)) {
+				parsedThread.postId = lastPart.substr(SMOGON_POST_PERMALINK_PREFIX.length);
+				parsedThread.threadId = parts[parts.length - 2];
+			} else if (lastPart.startsWith("#" + SMOGON_POST_PERMALINK_PREFIX)) {
+				parsedThread.postId = lastPart.substr(SMOGON_POST_PERMALINK_PREFIX.length + 1);
+				parsedThread.threadId = parts[parts.length - 2];
+			} else {
+				parsedThread.threadId = lastPart;
+			}
+			return parsedThread;
+		}
+
+		return null;
 	}
 
-	getNewerForumThread(baseLink: string, officialLink?: string): string {
-		if (!baseLink) return "";
+	getNewerForumLink(linkA: IParsedSmogonLink, linkB: IParsedSmogonLink): IParsedSmogonLink {
+		const linkAPost = linkA.postId && !linkA.threadId;
+		const linkBPost = linkB.postId && !linkB.threadId;
+		if (linkAPost && linkBPost) {
+			const linkAPostNumber = parseInt(linkA.postId!);
+			const linkBPostNumber = parseInt(linkB.postId!);
 
-		const baseNumber = parseInt(baseLink.split("/")[0]);
-		if (isNaN(baseNumber)) {
-			return "";
+			if (linkAPostNumber >= linkBPostNumber) return linkA;
+			return linkB;
+		} else {
+			if (linkAPost) return linkA;
+			if (linkBPost) return linkB;
 		}
 
-		if (officialLink) {
-			const officialNum = parseInt(officialLink.split("/")[0]);
-			if (!isNaN(officialNum) && officialNum > baseNumber) return SMOGON_FORUM_PREFIX + officialLink;
+		if (linkA.threadId && !linkB.threadId) return linkA;
+		if (linkB.threadId && !linkA.threadId) return linkB;
+
+		const linkANumber = parseInt(linkA.threadId!);
+		const linkBNumber = parseInt(linkB.threadId!);
+
+		if (linkANumber === linkBNumber) {
+			if (linkA.postId && !linkB.postId) return linkA;
+			if (linkB.postId && !linkA.postId) return linkB;
+
+			const postANumber = parseInt(linkA.postId!);
+			const postBNumber = parseInt(linkB.postId!);
+
+			if (postANumber >= postBNumber) return linkA;
+			return linkB;
 		}
 
-		return SMOGON_FORUM_PREFIX + baseLink;
+		if (linkANumber >= linkBNumber) return linkA;
+		return linkB;
 	}
 
 	extractBattleId(message: string, replayServerAddress: string, serverAddress: string, serverId: string): string | null {

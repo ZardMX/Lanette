@@ -6,11 +6,12 @@ import type { GameCommandDefinitions, IGameFile, IGameFormat } from "../../types
 const timeLimit = 30 * 1000;
 
 export class Vote extends ScriptedGame {
+	bannedFormats: string[] = [];
 	canVote: boolean | undefined;
 	chosenFormat: string = '';
 	endedVoting: boolean = false;
 	internalGame: boolean = true;
-	picks: string[] = [];
+	botSuggestions: string[] = [];
 	updateVotesHtmlTimeout: NodeJS.Timeout | null = null;
 	votesUhtmlName: string = '';
 	readonly votes = new Map<Player, string>();
@@ -68,8 +69,117 @@ export class Vote extends ScriptedGame {
 		}
 	}
 
+	getLeastPlayedFormat(): string {
+		const formats = Games.getLeastPlayedFormats(this.room);
+		for (const leastPlayedFormat of formats) {
+			if (this.isValidFormat(leastPlayedFormat)) {
+				return leastPlayedFormat.name;
+			}
+		}
+
+		return "";
+	}
+
+	isValidFormat(format: IGameFormat): boolean {
+		if (!this.bannedFormats.includes(format.name) && Games.canCreateGame(this.room, format) === true) return true;
+		return false;
+	}
+
+	getPmVoteButton(inputTarget: string, text: string): string {
+		return Client.getPmSelfButton(Config.commandCharacter + "pmvote " + inputTarget, text);
+	}
+
+	getPlayerVoteHtml(format: IGameFormat): string {
+		let html = "Your vote for <b>" + format.nameWithOptions + "</b> has been cast in " + this.room.title + "!";
+
+		const variants: IGameFormat[] = [];
+
+		if (!format.variant && format.variants) {
+			for (const variantData of format.variants) {
+				const variant = Games.getFormat(format.inputTarget + ", " + variantData.variantAliases[0]);
+				if (!Array.isArray(variant) && this.isValidFormat(variant)) variants.push(variant);
+			}
+
+			if (variants.length) {
+				html += "<br /><br /><details><summary>Votable game variants</summary>";
+				for (const variant of variants) {
+					html += this.getPmVoteButton(variant.inputTarget, variant.nameWithOptions);
+				}
+				html += "</details>";
+			}
+		}
+
+		if (!format.mode && format.modes) {
+			const modes: IGameFormat[] = [];
+			for (const modeId of format.modes) {
+				const mode = Games.getFormat(format.inputTarget + ", " + modeId);
+				if (!Array.isArray(mode) && this.isValidFormat(mode)) modes.push(mode);
+			}
+
+			if (modes.length) {
+				if (!variants.length) html += "<br />";
+				html += "<br /><details><summary>Votable game modes</summary>";
+				for (const mode of modes) {
+					html += this.getPmVoteButton(mode.inputTarget, mode.nameWithOptions);
+				}
+				html += "</details>";
+			}
+		}
+
+		return html;
+	}
+
 	onSignups(): void {
 		this.votesUhtmlName = this.uhtmlBaseName + '-votes';
+		this.bannedFormats = Games.getNextVoteBans(this.room);
+
+		const votableFormats: string[] = [];
+		for (const i in Games.formats) {
+			const format = Games.getExistingFormat(i);
+			if (this.isValidFormat(format)) {
+				votableFormats.push(format.name);
+			}
+		}
+
+		if (!votableFormats.length) {
+			this.say("There are no currently votable games.");
+			this.deallocate(true);
+			return;
+		}
+
+		const possibleBotPicks = this.shuffle(votableFormats);
+		this.botSuggestions = [];
+		for (let i = 0; i < 3; i++) {
+			if (!possibleBotPicks[i]) break;
+			this.botSuggestions.push(possibleBotPicks[i]);
+		}
+
+		let html = "<center><h3>Vote for the next scripted game with <code>" + Config.commandCharacter + "vote [game]</code></h3>";
+
+		if (this.botSuggestions.length) {
+			html += "<b>" + Users.self.name + "'s suggestions:</b><br />";
+
+			const buttons: string[] = [];
+			for (const pick of this.botSuggestions) {
+				buttons.push(this.getPmVoteButton(pick, pick));
+			}
+			html += buttons.join(" | ");
+			html += "<br />";
+		}
+
+		const leastPlayedFormat = this.getLeastPlayedFormat();
+		if (leastPlayedFormat) {
+			html += this.getPmVoteButton(leastPlayedFormat, "Least played game") + " | ";
+		}
+
+		html += this.getPmVoteButton("random", "Random game");
+		html += "<br /><br />";
+
+		html += "<details><summary>Current votable games</summary>";
+		for (const format of votableFormats) {
+			html += this.getPmVoteButton(format, format);
+		}
+		html += "</details></center>";
 
 		const database = Storage.getDatabase(this.room);
 		const pastGames: string[] = [];
@@ -84,36 +194,6 @@ export class Vote extends ScriptedGame {
 			}
 		}
 
-		const formats: string[] = [];
-		let possiblePicks: string[] = [];
-		for (const i in Games.formats) {
-			const format = Games.getExistingFormat(i);
-			if (format.disabled || format.tournamentGame) continue;
-			formats.push(format.name);
-			if (Games.canCreateGame(this.room, format) === true) possiblePicks.push(format.name);
-		}
-
-		possiblePicks = this.shuffle(possiblePicks);
-		this.picks = [];
-		for (let i = 0; i < 3; i++) {
-			if (!possiblePicks[i]) break;
-			this.picks.push(possiblePicks[i]);
-		}
-
-		let html = "<center><h3>Vote for the next scripted game with <code>" + Config.commandCharacter + "vote [game]</code></h3>";
-
-		if (this.picks.length) {
-			html += "<b>" + Users.self.name + "'s picks:</b><br />";
-
-			const buttons: string[] = [];
-			for (const pick of this.picks) {
-				buttons.push(Client.getPmSelfButton(Config.commandCharacter + "pmvote " + pick, pick));
-			}
-			html += buttons.join(" | ");
-			html += "<br /><br />";
-		}
-
-		html += "<details><summary>Click to see all games</summary>" + formats.sort().join(", ") + "</details></center>";
 		if (pastGames.length) {
 			html += "<br /><b>Past games (cannot be voted for)</b>: " + Tools.joinList(pastGames);
 		}
@@ -144,12 +224,12 @@ export class Vote extends ScriptedGame {
 				if (formats.length) {
 					format = this.sampleOne(formats);
 				} else {
-					if (!this.picks.length) {
+					if (!this.botSuggestions.length) {
 						this.say("A random game could not be chosen.");
 						this.forceEnd(Users.self);
 						return;
 					}
-					format = this.sampleOne(this.picks);
+					format = this.sampleOne(this.botSuggestions);
 				}
 
 				this.chosenFormat = format;
@@ -165,7 +245,7 @@ export class Vote extends ScriptedGame {
 
 	onAfterDeallocate(forceEnd: boolean): void {
 		if (!forceEnd && this.chosenFormat) {
-			void CommandParser.parse(this.room, Users.self, Config.commandCharacter + "creategame " + this.chosenFormat);
+			CommandParser.parse(this.room, Users.self, Config.commandCharacter + "creategame " + this.chosenFormat);
 		}
 	}
 }
@@ -181,7 +261,7 @@ const commands: GameCommandDefinitions<Vote> = {
 			if (targetId === 'random' || targetId === 'randomgame') {
 				const formats = Tools.shuffle(Games.getFormatList());
 				for (const randomFormat of formats) {
-					if (Games.canCreateGame(this.room, randomFormat) === true) {
+					if (this.isValidFormat(randomFormat)) {
 						format = randomFormat;
 						break;
 					}
@@ -193,12 +273,10 @@ const commands: GameCommandDefinitions<Vote> = {
 				}
 			} else {
 				if (targetId === 'leastplayed' || targetId === 'lpgame') {
-					const formats = Games.getLeastPlayedFormats(this.room);
-					for (const leastPlayedFormat of formats) {
-						if (Games.canCreateGame(this.room, leastPlayedFormat) === true) {
-							target = leastPlayedFormat.name;
-							break;
-						}
+					target = this.getLeastPlayedFormat();
+					if (!target) {
+						user.say("There is no valid least played game at this time.");
+						return false;
 					}
 				}
 
@@ -216,6 +294,11 @@ const commands: GameCommandDefinitions<Vote> = {
 				format = targetFormat;
 			}
 
+			if (this.bannedFormats.includes(format.name)) {
+				user.say(format.name + " cannot be voted for until after the next game.");
+				return false;
+			}
+
 			const canCreateGame = Games.canCreateGame(this.room, format);
 			if (canCreateGame !== true) {
 				user.say(canCreateGame + " Please vote for a different game!");
@@ -223,7 +306,7 @@ const commands: GameCommandDefinitions<Vote> = {
 			}
 
 			this.votes.set(player, format.inputTarget);
-			user.say("Your vote for " + format.nameWithOptions + " has been cast!");
+			player.sayHtml(this.getPlayerVoteHtml(format));
 
 			if (!this.updateVotesHtmlTimeout) {
 				this.updateVotesHtmlTimeout = setTimeout(() => {

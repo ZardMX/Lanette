@@ -1,7 +1,7 @@
 import { fail } from 'assert';
 import type { OneVsOne } from '../../games/internal/one-vs-one';
-import type { PRNGSeed } from '../../prng';
-import { PRNG } from '../../prng';
+import type { PRNGSeed } from '../../lib/prng';
+import { PRNG } from '../../lib/prng';
 import type { ScriptedGame } from '../../room-game-scripted';
 import type { GameFileTests, IGameFormat, IGameTestAttributes, IUserHostedFormat } from '../../types/games';
 import type { IPastGame } from '../../types/storage';
@@ -73,7 +73,9 @@ function createIndividualTests(format: IGameFormat, tests: GameFileTests): void 
 					const game = createIndividualTestGame(testFormat);
 					try {
 						// eslint-disable-next-line @typescript-eslint/await-thenable
-						await testData.test.call(this, game, testFormat, attributes);
+						await ((testData.test.call(this, game, testFormat, attributes) as unknown) as Promise<void>).catch(e => {
+							throw e;
+						});
 					} catch (e) {
 						console.log(e);
 						fail((e as Error).message + " (" + testFormat.name + "; initial seed = " + game.initialSeed + ")");

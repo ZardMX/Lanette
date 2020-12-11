@@ -199,6 +199,55 @@ describe("Dex", () => {
 		assertStrictEqual(Dex.isPokemon(move), false);
 		assertStrictEqual(Dex.isPokemon(fake), false);
 	});
+	it('should run methods for all data types', function() {
+		// eslint-disable-next-line @typescript-eslint/no-invalid-this
+		this.timeout(10000);
+
+		for (const i of Dex.data.abilityKeys) {
+			const ability = Dex.getExistingAbility(i);
+			Dex.getAbilityCopy(ability);
+			Dex.getAbilityCopy(i);
+		}
+
+		for (const i of Dex.data.itemKeys) {
+			const item = Dex.getExistingItem(i);
+			Dex.getItemCopy(item);
+			Dex.getItemCopy(i);
+			Dex.getItemIcon(item);
+			Dex.getPSItemIcon(item);
+		}
+
+		for (const i of Dex.data.formatKeys) {
+			const format = Dex.getExistingFormat(i);
+			Dex.getFormatInfoDisplay(format);
+			Dex.validateFormat(format.name);
+			Dex.getUsablePokemon(format);
+		}
+
+		for (const i of Dex.data.moveKeys) {
+			const move = Dex.getExistingMove(i);
+			Dex.getMoveCopy(move);
+			Dex.getMoveCopy(i);
+			Dex.getMoveAvailability(move);
+		}
+
+		for (const i of Dex.data.pokemonKeys) {
+			const pokemon = Dex.getExistingPokemon(i);
+			Dex.getPokemonCopy(pokemon);
+			Dex.getPokemonCopy(i);
+			Dex.getPokemonCategory(pokemon);
+			Dex.getFormes(pokemon);
+			Dex.getEvolutionLines(pokemon);
+			Dex.isPseudoLCPokemon(pokemon);
+			Dex.getWeaknesses(pokemon);
+			if (Dex.hasGifData(pokemon)) {
+				Dex.getPokemonGif(pokemon);
+			}
+			Dex.getPokemonIcon(pokemon);
+			Dex.getPSPokemonIcon(pokemon);
+			Dex.getLearnsetData(pokemon.id);
+		}
+	});
 	it('should set custom attributes for formats', () => {
 		for (const i of Dex.data.formatKeys) {
 			const format = Dex.getExistingFormat(i);
@@ -420,7 +469,7 @@ describe("Dex", () => {
 		assertStrictEqual(Dex.isPseudoLCPokemon(Dex.getExistingPokemon('Pichu')), false);
 		assertStrictEqual(Dex.isPseudoLCPokemon(Dex.getExistingPokemon('Pikachu')), false);
 		assertStrictEqual(Dex.isPseudoLCPokemon(Dex.getExistingPokemon('Raichu')), false);
-		assertStrictEqual(Dex.isPseudoLCPokemon(Dex.getExistingPokemon('Pawniard')), true);
+		assertStrictEqual(Dex.isPseudoLCPokemon(Dex.getExistingPokemon('Ferroseed')), true);
 	});
 	it('should return proper values from getEvolutionLines()', () => {
 		const pokemonList = ['Charmander', 'Charmeleon', 'Charizard'];
@@ -1018,7 +1067,6 @@ describe("Dex", () => {
 		assert(!pokemon.includes(Dex.getExistingPokemon('Voodoom').name));
 		assert(!pokemon.includes(Dex.getExistingPokemon('Missingno.').name));
 		assert(!pokemon.includes(Dex.getExistingPokemon('Pokestar Smeargle').name));
-		assert(!pokemon.includes(Dex.getExistingPokemon('Melmetal-Gmax').name));
 
 		assert(abilities.includes(Dex.getExistingAbility('Intimidate').name));
 
@@ -1039,12 +1087,15 @@ describe("Dex", () => {
 		const dex = Dex.getDex("gen1");
 		assert(!dex.getPokemonList().map(x => x.name).includes(dex.getExistingPokemon('Missingno.').name));
 	});
-	it('should have entries in Tools.pokemonColorHexColors for all Pokemon and moves', () => {
+	it('should have hex colors for all relevant Pokemon and move data', () => {
 		for (const i of Dex.data.pokemonKeys) {
 			const pokemon = Dex.getExistingPokemon(i);
 			assert(pokemon.color in Tools.pokemonColorHexColors, pokemon.name + "'s color " + pokemon.color);
 			for (const type of pokemon.types) {
 				assert(type in Tools.typeHexColors, pokemon.name + "'s type " + type);
+			}
+			for (const eggGroup of pokemon.eggGroups) {
+				assert(eggGroup in Tools.eggGroupHexColors, pokemon.name + "'s egg group " + eggGroup);
 			}
 		}
 

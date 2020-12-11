@@ -9,6 +9,11 @@ import type { GameDifficulty } from "./types/games";
 export let tempConfig: typeof Config = {};
 
 /**
+ * Configuration for the optional REPL server
+ */
+export let repl: {enabled?: boolean; port?: number} = {};
+
+/**
  * The username used for logging in to PS
  */
 export let username = '';
@@ -73,6 +78,11 @@ export let avatar = '';
  * The character used to denote commands in chat messages
  */
 export let commandCharacter = '.';
+
+/**
+ * For each room in the object, a list of commands that are never triggered
+ */
+export let roomIgnoredCommands: Dict<string[]> = {};
 
 /**
  * Whether or not PS code should be updated upon hotpatching

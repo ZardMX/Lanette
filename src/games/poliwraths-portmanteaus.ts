@@ -1,5 +1,5 @@
-import type { PRNGSeed } from "../prng";
-import { PRNG } from "../prng";
+import type { PRNGSeed } from "../lib/prng";
+import { PRNG } from "../lib/prng";
 import { assert, assertStrictEqual } from '../test/test-tools';
 import type { GameFileTests, IGameFile, IGameFormat } from "../types/games";
 import type { PoolType } from './../workers/portmanteaus';
@@ -79,7 +79,7 @@ export class PoliwrathsPortmanteaus extends QuestionAndAnswer {
 	}
 
 	// eslint-disable-next-line @typescript-eslint/require-await
-	async checkAnswer(guess: string): Promise<string> {
+	checkAnswer(guess: string): string {
 		let sanitizedGuess;
 		let guessParts;
 		if (guess.includes(',')) {
@@ -152,6 +152,7 @@ const tests: GameFileTests<PoliwrathsPortmanteaus> = {
 
 export const game: IGameFile<PoliwrathsPortmanteaus> = Games.copyTemplateProperties(questionAndAnswerGame, {
 	aliases: ['poliwraths', 'ports'],
+	canGetRandomAnswer: false,
 	category: 'puzzle',
 	challengePoints: {
 		onevsone: 5,

@@ -19,6 +19,7 @@ import type { User } from './users';
 
 const MAIN_HOST = "sim3.psim.us";
 const REPLAY_SERVER_ADDRESS = "replay.pokemonshowdown.com";
+const CHALLSTR_TIMEOUT_SECONDS = 15;
 const RELOGIN_SECONDS = 60;
 const REGULAR_MESSAGE_THROTTLE = 600;
 const TRUSTED_MESSAGE_THROTTLE = 100;
@@ -164,8 +165,13 @@ let closeListener: ((code: number, reason: string) => void) | null;
 let pongListener: (() => void) | null;
 
 export class Client {
+	htmlChatCommand: typeof HTML_CHAT_COMMAND = HTML_CHAT_COMMAND;
+	uhtmlChatCommand: typeof UHTML_CHAT_COMMAND = UHTML_CHAT_COMMAND;
+	uhtmlChangeChatCommand: typeof UHTML_CHANGE_CHAT_COMMAND = UHTML_CHANGE_CHAT_COMMAND;
+
 	botGreetingCooldowns: Dict<number> = {};
 	challstr: string = '';
+	challstrTimeout: NodeJS.Timer | undefined = undefined;
 	connectionAttempts: number = 0;
 	connectionTimeout: NodeJS.Timer | undefined = undefined;
 	evasionFilterRegularExpressions: RegExp[] | null = null;
@@ -184,7 +190,6 @@ export class Client {
 	publicChatRooms: string[] = [];
 	reconnectRoomMessages: Dict<string[]> = {};
 	reconnectTime: number = Config.reconnectTime || 60 * 1000;
-	reloginTimeout: NodeJS.Timer | null = null;
 	reloadInProgress: boolean = false;
 	replayServerAddress: string = Config.replayServer || REPLAY_SERVER_ADDRESS;
 	roomsToRejoin: string[] = [];
@@ -201,9 +206,7 @@ export class Client {
 	webSocket: import('ws') | null = null;
 
 	constructor() {
-		connectListener = () => {
-			void this.onConnect();
-		};
+		connectListener = () => this.onConnect();
 		messageListener = (message: Data) => this.onMessage(message);
 		errorListener = (error: Error) => this.onConnectionError(error);
 		closeListener = (code: number, description: string) => this.onConnectionClose(code, description);
@@ -230,35 +233,31 @@ export class Client {
 		if (!this.webSocket) return;
 
 		if (connectListener) {
-			this.webSocket.off('open', connectListener);
+			this.webSocket.removeAllListeners('open');
 			if (previousClient) connectListener = null;
 		}
 
 		if (messageListener) {
-			this.webSocket.off('message', messageListener);
+			this.webSocket.removeAllListeners('message');
 			if (previousClient) messageListener = null;
 		}
 
 		if (errorListener) {
-			this.webSocket.off('error', errorListener);
+			this.webSocket.removeAllListeners('error');
 			if (previousClient) errorListener = null;
 		}
 
 		if (closeListener) {
-			this.webSocket.off('close', closeListener);
+			this.webSocket.removeAllListeners('close');
 			if (previousClient) closeListener = null;
 		}
 
-		this.clearServerLatencyInterval(previousClient);
-	}
-
-	clearServerLatencyInterval(previousClient?: boolean): void {
-		if (this.serverPingTimeout) clearTimeout(this.serverPingTimeout);
-
 		if (pongListener) {
-			if (this.webSocket) this.webSocket.off('pong', pongListener);
+			this.webSocket.removeAllListeners('pong');
 			if (previousClient) pongListener = null;
 		}
+
+		if (this.serverPingTimeout) clearTimeout(this.serverPingTimeout);
 	}
 
 	pingServer(): void {
@@ -270,10 +269,10 @@ export class Client {
 		}
 
 		let pingTime = 0;
-		const newPongListener = () => {
+		pongListener = () => {
 			this.pingWsAlive = true;
 
-			if (this.reloadInProgress || this !== global.Client || pongListener !== newPongListener) return;
+			if (this.reloadInProgress || this !== global.Client) return;
 
 			if (pingTime) {
 				this.serverLatency = Math.ceil((Date.now() - pingTime) / 2) || ASSUMED_SERVER_LATENCY;
@@ -282,19 +281,19 @@ export class Client {
 			}
 		};
 
-		pongListener = newPongListener;
-
 		this.pingWsAlive = false;
+		this.webSocket.removeAllListeners('pong');
 		this.webSocket.once('pong', pongListener);
 		this.webSocket.ping('', undefined, () => {
 			pingTime = Date.now();
+			if (this.serverPingTimeout) clearTimeout(this.serverPingTimeout);
 			this.serverPingTimeout = setTimeout(() => this.pingServer(), SERVER_LATENCY_INTERVAL + 1000);
 		});
 	}
 
 	onReload(previous: Partial<Client>): void {
+		if (previous.challstrTimeout) clearTimeout(previous.challstrTimeout);
 		if (previous.serverPingTimeout) clearTimeout(previous.serverPingTimeout);
-		if (previous.reloginTimeout) clearTimeout(previous.reloginTimeout);
 
 		if (previous.lastSendTimeoutTime) this.lastSendTimeoutTime = previous.lastSendTimeoutTime;
 		if (previous.lastOutgoingMessage) this.lastOutgoingMessage = previous.lastOutgoingMessage;
@@ -357,8 +356,17 @@ export class Client {
 		}
 	}
 
-	onConnectFail(error?: Error): void {
+	clearConnectionTimeouts(): void {
 		if (this.connectionTimeout) clearTimeout(this.connectionTimeout);
+		if (this.challstrTimeout) clearTimeout(this.challstrTimeout);
+		if (this.loginTimeout) clearTimeout(this.loginTimeout);
+		if (this.serverPingTimeout) clearTimeout(this.serverPingTimeout);
+		this.clearSendTimeout();
+	}
+
+	onConnectFail(error?: Error): void {
+		this.clearConnectionTimeouts();
+
 		console.log('Failed to connect to server ' + this.serverId);
 		if (error) console.log(error.stack);
 		this.connectionAttempts++;
@@ -368,36 +376,35 @@ export class Client {
 	}
 
 	onConnectionError(error: Error): void {
-		if (this.connectionTimeout) clearTimeout(this.connectionTimeout);
-		if (this.loginTimeout) clearTimeout(this.loginTimeout);
+		this.clearConnectionTimeouts();
 
 		console.log('Connection error: ' + error.stack);
 		// 'close' is emitted directly after 'error' so reconnecting is handled in onConnectionClose
 	}
 
 	onConnectionClose(code: number, reason: string): void {
-		if (this.connectionTimeout) clearTimeout(this.connectionTimeout);
-		if (this.loginTimeout) clearTimeout(this.loginTimeout);
+		this.clearConnectionTimeouts();
 
 		console.log('Connection closed: ' + reason + ' (' + code + ')');
-		console.log('Reconnecting in ' + this.reconnectTime /  1000 + ' seconds');
+		console.log('Reconnecting in ' + this.reconnectTime / 1000 + ' seconds');
 
 		this.removeClientListeners();
 		this.connectionTimeout = setTimeout(() => this.reconnect(true), this.reconnectTime);
 	}
 
-	async onConnect(): Promise<void> {
-		if (this.connectionTimeout) {
-			clearTimeout(this.connectionTimeout);
-			delete this.connectionTimeout;
-		}
+	onConnect(): void {
+		this.clearConnectionTimeouts();
 
 		console.log('Successfully connected');
 
-		if (this.challstr) this.reloginTimeout = setTimeout(() => this.login(), RELOGIN_SECONDS * 1000);
+		this.challstrTimeout = setTimeout(() => {
+			console.log("Did not receive a challstr! Reconnecting in " + this.reconnectTime / 1000 + " seconds");
+			this.terminateWebSocket();
+			this.connectionTimeout = setTimeout(() => this.connect(), this.reconnectTime);
+		}, CHALLSTR_TIMEOUT_SECONDS * 1000);
 
 		this.pingServer();
-		await Dex.fetchClientData();
+		void Dex.fetchClientData();
 	}
 
 	connect(): void {
@@ -408,6 +415,7 @@ export class Client {
 		};
 
 		this.pauseIncomingMessages = false;
+		if (this.connectionTimeout) clearTimeout(this.connectionTimeout);
 		this.connectionTimeout = setTimeout(() => this.onConnectFail(), 30 * 1000);
 
 		console.log("Attempting to connect to the server " + this.server + "...");
@@ -456,13 +464,18 @@ export class Client {
 		});
 	}
 
-	reconnect(serverRestart?: boolean): void {
+	terminateWebSocket(): void {
 		this.removeClientListeners();
 		if (this.webSocket) {
 			this.webSocket.terminate();
 			this.webSocket = null;
 		}
 		this.pauseOutgoingMessages = true;
+	}
+
+	reconnect(serverRestart?: boolean): void {
+		this.clearConnectionTimeouts();
+		this.terminateWebSocket();
 
 		if (serverRestart) {
 			Rooms.removeAll();
@@ -519,6 +532,7 @@ export class Client {
 		} else {
 			room = Rooms.add('lobby');
 		}
+
 		for (let i = 0; i < lines.length; i++) {
 			if (!lines[i]) continue;
 			try {
@@ -550,6 +564,7 @@ export class Client {
 				}
 			} catch (e) {
 				console.log(e);
+				Tools.logError(e);
 			}
 		}
 	}
@@ -586,6 +601,8 @@ export class Client {
 		 * Global messages
 		 */
 		case 'challstr': {
+			if (this.challstrTimeout) clearTimeout(this.challstrTimeout);
+
 			this.challstr = message;
 			if (Config.username) this.login();
 			break;
@@ -625,6 +642,9 @@ export class Client {
 				this.loggedIn = true;
 				this.send({message: '|/blockchallenges', type: 'command'});
 				this.send({message: '|/cmd rooms', type: 'command'});
+				if (Tools.toAlphaNumeric(Config.username) !== Config.username) {
+					this.send({message: '|/trn ' + Config.username, type: 'command'});
+				}
 
 				if (rank) {
 					Users.self.group = rank;
@@ -856,7 +876,7 @@ export class Client {
 			const roomData = user.rooms.get(room);
 			room.onUserJoin(user, messageArguments.rank, roomData ? roomData.lastChatMessage : undefined);
 
-			Storage.updateLastSeen(user, Date.now());
+			Storage.updateLastSeen(user, now);
 			break;
 		}
 
@@ -873,7 +893,7 @@ export class Client {
 				};
 			} else {
 				messageArguments = {
-					timestamp: Date.now(),
+					timestamp: now,
 					rank: messageParts[0].charAt(0),
 					username: messageParts[0].substr(1),
 					message: messageParts.slice(1).join("|"),
@@ -889,14 +909,15 @@ export class Client {
 
 			if (user === Users.self) {
 				if (messageArguments.message.startsWith(HTML_CHAT_COMMAND)) {
-					const html = messageArguments.message.substr(HTML_CHAT_COMMAND.length);
-					if (this.lastOutgoingMessage && this.lastOutgoingMessage.type === 'html' && this.lastOutgoingMessage.html === html) {
+					const html = Tools.unescapeHTML(messageArguments.message.substr(HTML_CHAT_COMMAND.length));
+					const htmlId = Tools.toId(html);
+					if (this.lastOutgoingMessage && this.lastOutgoingMessage.type === 'html' &&
+						Tools.toId(this.lastOutgoingMessage.html) === htmlId) {
 						this.clearLastOutgoingMessage(now);
 					}
 
 					room.addHtmlChatLog(html);
 
-					const htmlId = Tools.toId(Tools.unescapeHTML(html));
 					if (htmlId in room.htmlMessageListeners) {
 						room.htmlMessageListeners[htmlId]();
 						delete room.htmlMessageListeners[htmlId];
@@ -914,9 +935,11 @@ export class Client {
 					const commaIndex = uhtml.indexOf(',');
 					if (commaIndex !== -1) {
 						const name = uhtml.substr(0, commaIndex);
-						const html = uhtml.substr(commaIndex + 1);
+						const html = Tools.unescapeHTML(uhtml.substr(commaIndex + 1));
+						const htmlId = Tools.toId(html);
 						if (this.lastOutgoingMessage && this.lastOutgoingMessage.type === 'uhtml' &&
-							Tools.toId(this.lastOutgoingMessage.uhtmlName) === name && this.lastOutgoingMessage.html === html) {
+							Tools.toId(this.lastOutgoingMessage.uhtmlName) === name &&
+							Tools.toId(this.lastOutgoingMessage.html) === htmlId) {
 							this.clearLastOutgoingMessage(now);
 						}
 
@@ -924,7 +947,6 @@ export class Client {
 
 						const uhtmlId = Tools.toId(name);
 						if (uhtmlId in room.uhtmlMessageListeners) {
-							const htmlId = Tools.toId(Tools.unescapeHTML(html));
 							if (htmlId in room.uhtmlMessageListeners[uhtmlId]) {
 								room.uhtmlMessageListeners[uhtmlId][htmlId]();
 								delete room.uhtmlMessageListeners[uhtmlId][htmlId];
@@ -947,7 +969,7 @@ export class Client {
 				}
 			} else {
 				room.addChatLog(messageArguments.message);
-				void this.parseChatMessage(room, user, messageArguments.message);
+				this.parseChatMessage(room, user, messageArguments.message, now);
 			}
 
 			Storage.updateLastSeen(user, messageArguments.timestamp);
@@ -967,7 +989,7 @@ export class Client {
 			const messageArguments: IClientMessageTypes[':'] = {
 				timestamp: parseInt(messageParts[0]),
 			};
-			this.serverTimeOffset = Math.floor(Date.now() / 1000) - messageArguments.timestamp;
+			this.serverTimeOffset = Math.floor(now / 1000) - messageArguments.timestamp;
 			break;
 		}
 
@@ -983,7 +1005,7 @@ export class Client {
 			const userId = Tools.toId(messageArguments.username);
 			if (!userId) return;
 
-			const isHtml = messageArguments.message.startsWith(HTML_CHAT_COMMAND) || messageArguments.message.startsWith("/html ");
+			const isHtml = messageArguments.message.startsWith(HTML_CHAT_COMMAND);
 			const isUhtml = !isHtml && messageArguments.message.startsWith(UHTML_CHAT_COMMAND);
 			const isUhtmlChange = !isHtml && !isUhtml && messageArguments.message.startsWith(UHTML_CHANGE_CHAT_COMMAND);
 
@@ -998,11 +1020,12 @@ export class Client {
 					const commaIndex = uhtml.indexOf(",");
 					const name = uhtml.substr(0, commaIndex);
 					const uhtmlId = Tools.toId(name);
-					const html = uhtml.substr(commaIndex + 1);
+					const html = Tools.unescapeHTML(uhtml.substr(commaIndex + 1));
+					const htmlId = Tools.toId(html);
 
 					if (this.lastOutgoingMessage && this.lastOutgoingMessage.type === 'pmuhtml' &&
 						this.lastOutgoingMessage.user === recipient.id && Tools.toId(this.lastOutgoingMessage.uhtmlName) === name &&
-						this.lastOutgoingMessage.html === html) {
+						Tools.toId(this.lastOutgoingMessage.html) === htmlId) {
 						this.clearLastOutgoingMessage(now);
 					}
 
@@ -1010,7 +1033,6 @@ export class Client {
 
 					if (recipient.uhtmlMessageListeners) {
 						if (uhtmlId in recipient.uhtmlMessageListeners) {
-							const htmlId = Tools.toId(Tools.unescapeHTML(html));
 							if (htmlId in recipient.uhtmlMessageListeners[uhtmlId]) {
 								recipient.uhtmlMessageListeners[uhtmlId][htmlId]();
 								delete recipient.uhtmlMessageListeners[uhtmlId][htmlId];
@@ -1018,16 +1040,16 @@ export class Client {
 						}
 					}
 				} else if (isHtml) {
-					const html = messageArguments.message.substr(messageArguments.message.indexOf(" ") + 1);
+					const html = Tools.unescapeHTML(messageArguments.message.substr(HTML_CHAT_COMMAND.length));
+					const htmlId = Tools.toId(html);
 					if (this.lastOutgoingMessage && this.lastOutgoingMessage.type === 'pmhtml' &&
-						this.lastOutgoingMessage.user === recipient.id && this.lastOutgoingMessage.html === html) {
+						this.lastOutgoingMessage.user === recipient.id && Tools.toId(this.lastOutgoingMessage.html) === htmlId) {
 						this.clearLastOutgoingMessage(now);
 					}
 
 					user.addHtmlChatLog(html);
 
 					if (recipient.htmlMessageListeners) {
-						const htmlId = Tools.toId(Tools.unescapeHTML(html));
 						if (htmlId in recipient.htmlMessageListeners) {
 							recipient.htmlMessageListeners[htmlId]();
 							delete recipient.htmlMessageListeners[htmlId];
@@ -1065,7 +1087,7 @@ export class Client {
 					}
 
 					if (messageArguments.rank !== this.groupSymbols.locked) {
-						void CommandParser.parse(user, user, commandMessage);
+						CommandParser.parse(user, user, commandMessage);
 					}
 				}
 			}
@@ -1092,12 +1114,12 @@ export class Client {
 		case 'raw':
 		case 'html': {
 			const messageArguments: IClientMessageTypes['html'] = {
-				html: messageParts.join("|"),
+				html: Tools.unescapeHTML(messageParts.join("|")),
 			};
 
 			room.addHtmlChatLog(messageArguments.html);
 
-			const htmlId = Tools.toId(Tools.unescapeHTML(messageArguments.html));
+			const htmlId = Tools.toId(messageArguments.html);
 			if (htmlId in room.htmlMessageListeners) {
 				room.htmlMessageListeners[htmlId]();
 				delete room.htmlMessageListeners[htmlId];
@@ -1112,7 +1134,7 @@ export class Client {
 				}
 				this.setSendTimeout(this.getSendThrottle() * SERVER_THROTTLE_BUFFER_LIMIT);
 			} else if (messageArguments.html.startsWith('<div class="broadcast-red"><strong>Moderated chat was set to ')) {
-				room.modchat = Tools.unescapeHTML(messageArguments.html).split('<div class="broadcast-red">' +
+				room.modchat = messageArguments.html.split('<div class="broadcast-red">' +
 					'<strong>Moderated chat was set to ')[1].split('!</strong>')[0];
 			} else if (messageArguments.html.startsWith('<div class="broadcast-red"><strong>This battle is invite-only!</strong>')) {
 				room.inviteOnlyBattle = true;
@@ -1123,8 +1145,7 @@ export class Client {
 					const separatedCustomRules: ISeparatedCustomRules = {
 						addedbans: [], removedbans: [], addedrestrictions: [], addedrules: [], removedrules: [],
 					};
-					const unescapedHtml = Tools.unescapeHTML(messageArguments.html);
-					const lines = unescapedHtml.substr(0, unescapedHtml.length - 6)
+					const lines = messageArguments.html.substr(0, messageArguments.html.length - 6)
 						.split('<div class="infobox infobox-limited">This tournament includes:<br />')[1].split('<br />');
 					let currentCategory: 'addedbans' | 'removedbans' | 'addedrestrictions' | 'addedrules' | 'removedrules' = 'addedbans';
 					for (let line of lines) {
@@ -1147,10 +1168,9 @@ export class Client {
 			} else if (messageArguments.html.startsWith('<div class="broadcast-green"><p style="text-align:left;font-weight:bold;' +
 				'font-size:10pt;margin:5px 0 0 15px">The word has been guessed. Congratulations!</p>')) {
 				if (room.userHostedGame) {
-					const winner = Tools.unescapeHTML(messageArguments.html.split('<br />Winner: ')[1]
-						.split('</td></tr></table></div>')[0].trim());
+					const winner = messageArguments.html.split('<br />Winner: ')[1].split('</td></tr></table></div>')[0].trim();
 					if (Tools.isUsernameLength(winner)) {
-						room.userHostedGame.useHostCommand("addpoint", winner);
+						room.userHostedGame.useHostCommand("addgamepoint", winner);
 					}
 				}
 				delete room.serverHangman;
@@ -1204,6 +1224,7 @@ export class Client {
 								}
 							} catch (e) {
 								console.log(e);
+								Tools.logError(e);
 							}
 
 							if (regularExpression) {
@@ -1229,14 +1250,14 @@ export class Client {
 		case 'uhtml': {
 			const messageArguments: IClientMessageTypes['uhtml'] = {
 				name: messageParts[0],
-				html: messageParts.slice(1).join("|"),
+				html: Tools.unescapeHTML(messageParts.slice(1).join("|")),
 			};
 
 			room.addUhtmlChatLog(messageArguments.name, messageArguments.html);
 
 			const id = Tools.toId(messageArguments.name);
 			if (id in room.uhtmlMessageListeners) {
-				const htmlId = Tools.toId(Tools.unescapeHTML(messageArguments.html));
+				const htmlId = Tools.toId(messageArguments.html);
 				if (htmlId in room.uhtmlMessageListeners[id]) {
 					room.uhtmlMessageListeners[id][htmlId]();
 					delete room.uhtmlMessageListeners[id][htmlId];
@@ -1528,8 +1549,8 @@ export class Client {
 		}
 	}
 
-	async parseChatMessage(room: Room, user: User, message: string): Promise<void> {
-		await CommandParser.parse(room, user, message);
+	parseChatMessage(room: Room, user: User, message: string, now: number): void {
+		CommandParser.parse(room, user, message);
 
 		const lowerCaseMessage = message.toLowerCase();
 
@@ -1585,7 +1606,7 @@ export class Client {
 					room.approvedUserHostedTournaments[link] = {
 						hostName: user.name,
 						hostId: user.id,
-						startTime: Date.now(),
+						startTime: now,
 						approvalStatus: 'approved',
 						reviewer: user.id,
 						urls: [link],
@@ -1759,7 +1780,7 @@ export class Client {
 	}
 
 	login(): void {
-		if (this.reloginTimeout) clearTimeout(this.reloginTimeout);
+		if (this.loginTimeout) clearTimeout(this.loginTimeout);
 
 		const action = url.parse('https://' + Tools.mainServer + '/~~' + this.serverId + '/action.php');
 		if (!action.hostname || !action.pathname) {
@@ -1811,11 +1832,13 @@ export class Client {
 					process.exit();
 				} else if (data.startsWith('<!DOCTYPE html>')) {
 					console.log('Failed to log in: connection timed out. Trying again in ' + RELOGIN_SECONDS + ' seconds');
+					if (this.loginTimeout) clearTimeout(this.loginTimeout);
 					this.loginTimeout = setTimeout(() => this.login(), RELOGIN_SECONDS * 1000);
 					return;
 				} else if (data.includes('heavy load')) {
 					console.log('Failed to log in: the login server is under heavy load. Trying again in ' + (RELOGIN_SECONDS * 5) +
 						' seconds');
+					if (this.loginTimeout) clearTimeout(this.loginTimeout);
 					this.loginTimeout = setTimeout(() => this.login(), RELOGIN_SECONDS * 5 * 1000);
 					return;
 				} else {

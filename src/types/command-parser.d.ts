@@ -4,8 +4,7 @@ import type { User } from "../users";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface ICommandDefinition<ThisContext, ReturnType = any> {
-	asyncCommand?: (this: ThisContext, target: string, room: Room | User, user: User, alias: string) => Promise<ReturnType>;
-	command?: (this: ThisContext, target: string, room: Room | User, user: User, alias: string) => ReturnType;
+	command: (this: ThisContext, target: string, room: Room | User, user: User, alias: string) => ReturnType;
 	aliases?: string[];
 	readonly chatOnly?: boolean;
 	readonly eliminatedGameCommand?: boolean;
@@ -29,8 +28,8 @@ export type LoadedCommands<ThisContext, ReturnType = any> = Dict<LoadedCommand<T
 export type BaseLoadedCommands = LoadedCommands<CommandContext>;
 
 export type CommandErrorOptionalTarget = 'invalidBotRoom' | 'invalidAbility' | 'invalidFormat' | 'invalidGameFormat' | 'invalidItem' |
-	'invalidMove' | 'invalidPokemon' | 'invalidTournamentFormat' | 'invalidUserHostedGameFormat' | 'invalidType' | 'tooManyGameModes' |
-	'tooManyGameVariants' | 'emptyUserHostedGameQueue';
+	'invalidMove' | 'invalidPokemon' | 'invalidTournamentFormat' | 'invalidUserHostedGameFormat' | 'invalidType' | 'invalidEggGroup' |
+	'tooManyGameModes' | 'tooManyGameVariants' | 'emptyUserHostedGameQueue';
 
 export type CommandErrorRequiredTarget = 'noPmHtmlRoom' | 'missingBotRankForFeatures' | 'disabledTournamentFeatures' |
 	'disabledGameFeatures' | 'disabledTournamentGameFeatures' | 'disabledUserHostedGameFeatures' | 'disabledUserHostedTournamentFeatures' |

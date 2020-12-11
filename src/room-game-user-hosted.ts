@@ -60,7 +60,7 @@ export class UserHostedGame extends Game {
 	useHostCommand(command: string, target?: string): void {
 		const user = Users.get(this.subHostName || this.hostName);
 		if (user) {
-			void CommandParser.parse(this.room, user, Config.commandCharacter + command + (target ? " " + target : ""));
+			CommandParser.parse(this.room, user, Config.commandCharacter + command + (target ? " " + target : ""));
 		}
 	}
 
@@ -270,7 +270,7 @@ export class UserHostedGame extends Game {
 			database.pastUserHostedGames.pop();
 		}
 
-		Storage.addPoints(this.room, hostName, hostBits, 'userhosted');
+		Storage.addPoints(this.room, Storage.gameLeaderboard, hostName, hostBits, 'userhosted');
 		const user = Users.get(hostName);
 		if (user) {
 			user.say("You were awarded " + hostBits + " bits! To see your total amount, use this command: ``" + Config.commandCharacter +
@@ -283,6 +283,7 @@ export class UserHostedGame extends Game {
 	}
 
 	forceEnd(user: User, reason?: string): void {
+		delete Games.lastUserHostTimes[this.room.id][this.hostId];
 		this.say(this.name + " " + this.activityType + " was forcibly ended!");
 		this.sayCommand("/modnote " + this.name + " was forcibly ended by " + user.name + (reason ? " (" + reason + ")" : ""));
 		this.deallocate(true);

@@ -1,17 +1,20 @@
 import path = require('path');
 
-import { alternateIconNumbers } from './data/alternate-icon-numbers';
 import { badges as badgeData } from './data/badges';
 import { categories as categoryData } from './data/categories';
 import { characters as characterData } from './data/characters';
 import { formatLinks } from './data/format-links';
 import { locations as locationData } from './data/locations';
 import { trainerClasses } from './data/trainer-classes';
-import type { CategoryData, IDataTable, IGetPossibleTeamsOptions, IGifData, ISeparatedCustomRules, LocationTypes } from './types/dex';
+import type {
+	CategoryData, IAlternateIconNumbers, IDataTable, IGetPossibleTeamsOptions, IGifData, ISeparatedCustomRules,
+	LocationTypes
+} from './types/dex';
 import type {
 	IAbility, IAbilityCopy, IFormat, IItem, IItemCopy, ILearnsetData, IMove, IMoveCopy, INature, IPokemon, IPokemonCopy,
 	IPokemonShowdownDex, IPokemonShowdownValidator, IPSFormat, ITypeData
 } from './types/pokemon-showdown';
+import type { IParsedSmogonLink } from './types/tools';
 
 const MAX_CUSTOM_NAME_LENGTH = 100;
 const DEFAULT_CUSTOM_RULES_NAME = " (with custom rules)";
@@ -255,6 +258,9 @@ export class Dex {
 		}
 
 		/* eslint-disable @typescript-eslint/no-var-requires */
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+		const alternateIconNumbers = require(path.join(this.clientDataDirectory, 'alternate-icon-numbers.js'))
+			.alternateIconNumbers as IAlternateIconNumbers;
 		// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
 		const gifData = require(path.join(this.clientDataDirectory, 'pokedex-mini.js')).BattlePokemonSprites as Dict<IGifData | undefined>;
 		// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
@@ -812,7 +818,7 @@ export class Dex {
 		} else if (Array.isArray(target)) {
 			targetType = target;
 		} else {
-			targetType = (target as IPokemon).types;
+			targetType = target.types;
 		}
 
 		if (Array.isArray(targetType)) {
@@ -833,7 +839,6 @@ export class Dex {
 			this.immunityCache[sourceType][cacheKey] = false;
 			return false;
 		} else {
-			targetType = targetType as string;
 			if (!Object.prototype.hasOwnProperty.call(this.immunityCache, sourceType)) {
 				this.immunityCache[sourceType] = {};
 			} else if (Object.prototype.hasOwnProperty.call(this.immunityCache[sourceType], targetType)) {
@@ -868,7 +873,7 @@ export class Dex {
 		} else if (Array.isArray(target)) {
 			targetType = target;
 		} else {
-			targetType = (target as IPokemon).types;
+			targetType = target.types;
 		}
 
 		if (Array.isArray(targetType)) {
@@ -887,7 +892,6 @@ export class Dex {
 			this.effectivenessCache[sourceType][cacheKey] = totalTypeMod;
 			return totalTypeMod;
 		} else {
-			targetType = targetType as string;
 			if (!Object.prototype.hasOwnProperty.call(this.effectivenessCache, sourceType)) {
 				this.effectivenessCache[sourceType] = {};
 			} else if (Object.prototype.hasOwnProperty.call(this.effectivenessCache[sourceType], targetType)) {
@@ -999,7 +1003,7 @@ export class Dex {
 		let num = pokemon.num;
 		if (num < 0) {
 			num = 0;
-		} else if (num > 893) {
+		} else if (num > 898) {
 			num = 0;
 		}
 
@@ -1020,7 +1024,7 @@ export class Dex {
 		const left = (num % 12) * width;
 		const facingLeftStyle = facingLeft ? "transform:scaleX(-1);webkit-transform:scaleX(-1);" : "";
 		return '<span style="display: inline-block;height: ' + height + 'px;width: ' + width + 'px;image-rendering: pixelated;' +
-			'background:transparent url(https://' + Tools.mainServer + '/sprites/pokemonicons-sheet.png?v2) no-repeat scroll -' + left +
+			'background:transparent url(https://' + Tools.mainServer + '/sprites/pokemonicons-sheet.png?v4) no-repeat scroll -' + left +
 			'px -' + top + 'px;' + facingLeftStyle + '"></span>';
 	}
 
@@ -1064,7 +1068,7 @@ export class Dex {
 
 		const colorData = Tools.hexColorCodes[Tools.typeHexColors[type.name]];
 		return '<div style="display:inline-block;background-color:' + colorData['background-color'] + ';background:' +
-			colorData['background'] + ';border-color:' + colorData['border-color'] + ';border: 1px solid #a99890;border-radius:3px;' +
+			colorData['background'] + ';border: 1px solid #a99890;border-radius:3px;' +
 			'width:' + width + 'px;padding:1px;color:#fff;text-shadow:1px 1px 1px #333;text-transform: uppercase;' +
 			'font-size:8pt;text-align:center"><b>' + type.name + '</b></div>';
 	}
@@ -1152,21 +1156,22 @@ export class Dex {
 			(format.team && (format.id.includes('1v1') || format.id.includes('monotype'))) || format.mod === 'seasonal' ||
 			format.mod === 'ssb' ? true : false;
 
-		let info: string | undefined;
-		let teams: string | undefined;
-		let viability: string | undefined;
+		let info: IParsedSmogonLink | undefined;
+		let teams: IParsedSmogonLink | undefined;
+		let viability: IParsedSmogonLink | undefined;
 
 		const idWithoutGen = format.name.includes("[Gen ") ? Tools.toId(format.name.substr(format.name.indexOf(']') + 1)) : format.id;
 		if (format.threads) {
 			const threads = format.threads.slice();
 			for (const thread of threads) {
-				const parsedThread = Tools.parseFormatThread(thread);
+				const parsedThread = Tools.parseSmogonLink(thread);
+				if (!parsedThread) continue;
 				if (parsedThread.description.includes('Viability Rankings')) {
-					viability = parsedThread.id;
+					viability = parsedThread;
 				} else if (parsedThread.description.includes('Sample Teams')) {
-					teams = parsedThread.id;
+					teams = parsedThread;
 				} else if (Tools.toId(parsedThread.description) === idWithoutGen) {
-					info = parsedThread.id;
+					info = parsedThread;
 				}
 			}
 
@@ -1176,34 +1181,43 @@ export class Dex {
 					format['info-official'] = info;
 					format.info = links.info;
 				} else {
-					format.info = info;
+					format.info = info ? info.link : undefined;
 				}
 
 				if (links.teams) {
 					format['teams-official'] = teams;
 					format.teams = links.teams;
 				} else {
-					format.teams = teams;
+					format.teams = teams ? teams.link : undefined;
 				}
 
 				if (links.viability) {
 					format['viability-official'] = viability;
 					format.viability = links.viability;
 				} else {
-					format.viability = viability;
+					format.viability = viability ? viability.link : undefined;
 				}
 			} else {
-				format.info = info;
-				format.teams = teams;
-				format.viability = viability;
+				format.info = info ? info.link : undefined;
+				format.teams = teams ? teams.link : undefined;
+				format.viability = viability ? viability.link : undefined;
 			}
 
 			const links = ['info', 'roleCompendium', 'teams', 'viability'] as const;
 			for (const id of links) {
 				if (format[id]) {
 					// @ts-expect-error
-					const officialLink = format[id + '-official'] as string;
-					format[id] = Tools.getNewerForumThread(format[id] as string, officialLink);
+					const officialLink = format[id + '-official'] as IParsedSmogonLink | undefined;
+					if (!officialLink) continue;
+
+					const storedLink = Tools.parseSmogonLink(format[id]!);
+					if (!storedLink || storedLink.dexPage) continue;
+
+					if (officialLink.dexPage) {
+						format[id] = officialLink.link;
+					} else if (officialLink.threadId && storedLink.threadId) {
+						format[id] = Tools.getNewerForumLink(storedLink, officialLink).link;
+					}
 				}
 			}
 		}
@@ -1236,7 +1250,7 @@ export class Dex {
 
 		const links: string[] = [];
 		if (format.mod in mechanicsDifferences) {
-			links.push('&bull;&nbsp;<a href="' + Tools.smogonForumPrefix + mechanicsDifferences[format.mod] + '">Gen ' + format.gen +
+			links.push('&bull;&nbsp;<a href="' + Tools.smogonThreadsPrefix + mechanicsDifferences[format.mod] + '">Gen ' + format.gen +
 				' mechanics differences</a>');
 		}
 
@@ -1918,7 +1932,11 @@ export class Dex {
 			let firstStage = pokemon;
 			while (firstStage.prevo) {
 				const prevo = this.getPokemon(firstStage.prevo);
-				if (prevo) firstStage = prevo;
+				if (prevo) {
+					firstStage = prevo;
+				} else {
+					break;
+				}
 			}
 			return this.getAllEvolutionLines(firstStage, [], []);
 		}

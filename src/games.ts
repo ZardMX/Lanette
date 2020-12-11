@@ -1,7 +1,7 @@
 import fs = require('fs');
 import path = require('path');
 
-import type { PRNGSeed } from './prng';
+import type { PRNGSeed } from './lib/prng';
 import { ScriptedGame } from './room-game-scripted';
 import type { UserHostedGame } from './room-game-user-hosted';
 import type { Room } from "./rooms";
@@ -107,6 +107,7 @@ export class Games {
 	readonly minigameCommandNames: Dict<{aliases: string[]; format: string}> = {};
 	readonly modes: Dict<IGameMode> = {};
 	readonly modeAliases: Dict<string> = {};
+	nextVoteBans: Dict<string[]> = {};
 	reloadInProgress: boolean = false;
 	readonly userHostedAliases: Dict<string> = {};
 	readonly userHostedFormats: Dict<IUserHostedComputed> = {};
@@ -177,6 +178,12 @@ export class Games {
 		if (previous.lastUserHostedGames) Object.assign(this.lastUserHostedGames, previous.lastUserHostedGames);
 		if (previous.lastUserHostTimes) Object.assign(this.lastUserHostTimes, previous.lastUserHostTimes);
 		if (previous.lastUserHostFormatTimes) Object.assign(this.lastUserHostFormatTimes, previous.lastUserHostFormatTimes);
+
+		if (previous.nextVoteBans) {
+			for (const i in previous.nextVoteBans) {
+				this.nextVoteBans[i] = previous.nextVoteBans[i].slice();
+			}
+		}
 
 		for (const i in previous) {
 			// @ts-expect-error
@@ -470,24 +477,24 @@ export class Games {
 	loadFormatCommands(): void {
 		for (const i in this.commands) {
 			Commands[i] = {
-				async asyncCommand(target, room, user, command) {
+				command(target, room, user, command) {
 					let returnedResult: boolean = false;
 					if (this.isPm(room)) {
 						if (user.game) {
-							const result = await user.game.tryCommand(target, user, user, command);
+							const result = user.game.tryCommand(target, user, user, command);
 							if (result) returnedResult = result;
 						} else {
 							// eslint-disable-next-line @typescript-eslint/no-misused-promises, @typescript-eslint/space-before-function-paren
-							user.rooms.forEach(async (value, userRoom) => {
+							user.rooms.forEach((value, userRoom) => {
 								if (userRoom.game) {
-									const result = await userRoom.game.tryCommand(target, user, user, command);
+									const result = userRoom.game.tryCommand(target, user, user, command);
 									if (result) returnedResult = result;
 								}
 							});
 						}
 					} else {
 						if (room.game) {
-							const result = await room.game.tryCommand(target, room, user, command);
+							const result = room.game.tryCommand(target, room, user, command);
 							if (result) returnedResult = result;
 						}
 					}
@@ -966,7 +973,34 @@ export class Games {
 		room.userHostedGame.initialize(format);
 		room.userHostedGame.setHost(host);
 
+		if (!(room.id in this.lastUserHostTimes)) this.lastUserHostTimes[room.id] = {};
+		if (typeof host === 'string') {
+			this.lastUserHostTimes[room.id][Tools.toId(host)] = Date.now();
+		} else {
+			this.lastUserHostTimes[room.id][host.id] = Date.now();
+		}
+
 		return room.userHostedGame;
+	}
+
+	banFromNextVote(room: Room, format: IGameFormat): void {
+		if (!(room.id in this.nextVoteBans)) this.nextVoteBans[room.id] = [];
+		this.nextVoteBans[room.id].push(format.inputTarget);
+	}
+
+	getNextVoteBans(room: Room): string[] {
+		const bans: string[] = [];
+		if (room.id in this.nextVoteBans) {
+			for (const inputTarget of this.nextVoteBans[room.id]) {
+				const format = this.getFormat(inputTarget);
+				if (!Array.isArray(format)) bans.push(format.name);
+			}
+		}
+		return bans;
+	}
+
+	clearNextVoteBans(room: Room): void {
+		delete this.nextVoteBans[room.id];
 	}
 
 	setAutoCreateTimer(room: Room, type: AutoCreateTimerType, timer: number): void {
@@ -982,11 +1016,11 @@ export class Games {
 			delete this.autoCreateTimerData[room.id];
 			const database = Storage.getDatabase(room);
 			if (type === 'tournament') {
-				void CommandParser.parse(room, Users.self, Config.commandCharacter + "createrandomtournamentgame");
+				CommandParser.parse(room, Users.self, Config.commandCharacter + "createrandomtournamentgame");
 			} else if (type === 'scripted' || !database.userHostedGameQueue || !database.userHostedGameQueue.length) {
-				void CommandParser.parse(room, Users.self, Config.commandCharacter + "startvote");
+				CommandParser.parse(room, Users.self, Config.commandCharacter + "startvote");
 			} else if (type === 'userhosted') { // eslint-disable-line @typescript-eslint/no-unnecessary-condition
-				void CommandParser.parse(room, Users.self, Config.commandCharacter + "nexthost");
+				CommandParser.parse(room, Users.self, Config.commandCharacter + "nexthost");
 			}
 		}, timer);
 	}

@@ -1,8 +1,8 @@
 // eslint-disable-next-line @typescript-eslint/naming-convention
 import worker_threads = require('worker_threads');
 
-import { PRNG } from '../../prng';
-import type { PRNGSeed } from '../../prng';
+import type { PRNGSeed } from '../../lib/prng';
+import { PRNG } from '../../lib/prng';
 import * as tools from '../../tools';
 import type {
 	IParam, IParametersIntersectMessage, IParametersIntersectOptions, IParametersResponse, IParametersSearchMessage,
@@ -38,22 +38,7 @@ for (const searchType of searchTypes) {
 }
 
 function intersect(options: IParametersIntersectOptions): string[] {
-	let intersection = Tools.intersectParams(options.params, data[options.searchType].gens[options.mod].paramTypeDexes);
-
-	// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-	if (options.searchType === 'pokemon') {
-		const filtered: string[] = [];
-		for (const slice of intersection) {
-			const id = Tools.toId(slice);
-			const isAlola = data.pokemon.gens[options.mod].formes[id] === 'Alola' && slice !== "Pikachu-Alola";
-			if (!isAlola && id in data.pokemon.gens[options.mod].otherFormes &&
-				intersection.includes(data.pokemon.gens[options.mod].otherFormes[id])) continue;
-			filtered.push(id);
-		}
-
-		intersection = filtered;
-	}
-	return intersection.sort();
+	return Tools.intersectParams(options.searchType, options.params, data[options.searchType].gens[options.mod]);
 }
 
 function search(options: IParametersSearchOptions, prng: PRNG): IParametersResponse {
@@ -190,6 +175,7 @@ worker_threads.parentPort!.on('message', (incommingMessage: string) => {
 		}
 	} catch (e) {
 		console.log(e);
+		Tools.logError(e);
 	}
 
 	// eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/no-unnecessary-condition

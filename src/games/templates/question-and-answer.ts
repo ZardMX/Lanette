@@ -16,6 +16,8 @@ export abstract class QuestionAndAnswer extends ScriptedGame {
 	firstAnswer: Player | false | undefined;
 	hint: string = '';
 	hintUhtmlName: string = '';
+	inactiveRounds: number = 0;
+	inactiveRoundLimit: number = 10;
 	lastHintHtml: string = '';
 	multiRoundHints: boolean = false;
 	readonly points = new Map<Player, number>();
@@ -29,7 +31,7 @@ export abstract class QuestionAndAnswer extends ScriptedGame {
 	readonly roundGuesses?: Map<Player, boolean>;
 	updateHintTime?: number;
 
-	abstract async setAnswers(): Promise<void>;
+	abstract setAnswers(): Promise<void>;
 
 	onInitialize(format: IGameFormat): void {
 		super.onInitialize(format);
@@ -72,6 +74,13 @@ export abstract class QuestionAndAnswer extends ScriptedGame {
 				return;
 			}
 		}
+
+		this.inactiveRounds++;
+		if (this.inactiveRounds === this.inactiveRoundLimit) {
+			this.inactivityEnd();
+			return;
+		}
+
 		this.nextRound();
 	}
 
@@ -142,7 +151,13 @@ export abstract class QuestionAndAnswer extends ScriptedGame {
 		this.roundTime = Math.max(2000, this.roundTime - 1000);
 	}
 
-	async guessAnswer(player: Player, guess: string): Promise<string | false> {
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	canGuessAnswer(player: Player): boolean {
+		if (this.ended || !this.canGuess || !this.answers.length) return false;
+		return true;
+	}
+
+	guessAnswer(player: Player, guess: string): string | false {
 		if (!Tools.toId(guess) || this.filterGuess && this.filterGuess(guess)) return false;
 
 		if (this.roundGuesses) {
@@ -150,7 +165,7 @@ export abstract class QuestionAndAnswer extends ScriptedGame {
 			this.roundGuesses.set(player, true);
 		}
 
-		let answer = await this.checkAnswer(guess);
+		let answer = this.checkAnswer(guess);
 		if (this.ended || !this.answers.length) return false;
 
 		if (!answer) {
@@ -165,12 +180,13 @@ export abstract class QuestionAndAnswer extends ScriptedGame {
 		}
 
 		this.offUhtml(this.hintUhtmlName, this.lastHintHtml);
+		this.inactiveRounds = 0;
 
 		return answer;
 	}
 
 	// eslint-disable-next-line @typescript-eslint/require-await
-	async checkAnswer(guess: string): Promise<string> {
+	checkAnswer(guess: string): string {
 		guess = Tools.toId(guess);
 		let match = '';
 		const guessMega = guess.substr(0, 4) === 'mega' ? guess.substr(4) + 'mega' : '';
@@ -190,8 +206,9 @@ export abstract class QuestionAndAnswer extends ScriptedGame {
 			Tools.joinList(this.answers) + "__.";
 	}
 
-	async getRandomAnswer(): Promise<IRandomGameAnswer> {
-		await this.setAnswers();
+	getRandomAnswer(): IRandomGameAnswer {
+		// true async setAnswers() should not have canGetRandomAnswer
+		void this.setAnswers();
 		if (this.updateHint) this.updateHint();
 		return {answers: this.answers, hint: this.hint};
 	}
@@ -213,13 +230,13 @@ export abstract class QuestionAndAnswer extends ScriptedGame {
 const commands: GameCommandDefinitions<QuestionAndAnswer> = {
 	guess: {
 		// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-		async asyncCommand(target, room, user): Promise<GameCommandReturnType> {
-			if (!this.canGuess || !this.answers.length) return false;
+		command(target, room, user): GameCommandReturnType {
 			const player = this.createPlayer(user) || this.players[user.id];
-			if (!player.active) player.active = true;
+			if (!this.canGuessAnswer(player)) return false;
 
-			const answer = await this.guessAnswer(player, target);
-			if (!answer) return false;
+			if (!player.active) player.active = true;
+			const answer = this.guessAnswer(player, target);
+			if (!answer || !this.canGuessAnswer(player)) return false;
 
 			if (this.timeout) clearTimeout(this.timeout);
 
@@ -291,15 +308,13 @@ const tests: GameFileTests<QuestionAndAnswer> = {
 			assert(!game.canGuess);
 			const name = getBasePlayerName() + " 1";
 			const id = Tools.toId(name);
-			await runCommand('guess', "test", game.room, name);
-			assert(!(id in game.players));
 
 			await game.onNextRound();
 			assert(game.answers.length);
 			assert(game.hint);
 			const expectedPoints = game.getPointsForAnswer ? game.getPointsForAnswer(game.answers[0]) : 1;
 			game.canGuess = true;
-			await runCommand('guess', game.answers[0], game.room, name);
+			runCommand('guess', game.answers[0], game.room, name);
 			assert(id in game.players);
 			assertStrictEqual(game.points.get(game.players[id]), expectedPoints);
 			assert(!game.answers.length);
@@ -318,7 +333,7 @@ const tests: GameFileTests<QuestionAndAnswer> = {
 			const previousHint = game.hint;
 			game.canGuess = true;
 			const name = getBasePlayerName() + " 1";
-			await runCommand('guess', "a", game.room, name);
+			runCommand('guess', "a", game.room, name);
 
 			await game.onNextRound();
 			assertStrictEqual(game.answers, previousAnswers);
@@ -342,7 +357,7 @@ const tests: GameFileTests<QuestionAndAnswer> = {
 				await game.onNextRound();
 				game.answerTimeout = setTimeout(() => game.onAnswerTimeLimit(), game.roundTime);
 				game.canGuess = true;
-				await runCommand('guess', game.answers[0], game.room, name);
+				runCommand('guess', game.answers[0], game.room, name);
 				assert(id in game.players);
 				assert(game.points.has(game.players[id]));
 				assert(!game.answerTimeout);
@@ -401,7 +416,7 @@ const tests: GameFileTests<QuestionAndAnswer> = {
 				const points = game.points.get(game.players[id]);
 				if (points) expectedPoints += points;
 				game.canGuess = true;
-				await runCommand('guess', game.answers[0], game.room, name);
+				runCommand('guess', game.answers[0], game.room, name);
 				assertStrictEqual(game.points.get(game.players[id]), expectedPoints);
 				if (game.ended) break;
 			}
@@ -426,7 +441,7 @@ const tests: GameFileTests<QuestionAndAnswer> = {
 			await minigame.onNextRound();
 			assert(minigame.answers.length);
 			minigame.canGuess = true;
-			await runCommand('guess', minigame.answers[0], minigame.room, getBasePlayerName());
+			runCommand('guess', minigame.answers[0], minigame.room, getBasePlayerName());
 			assert(minigame.ended);
 
 			minigame.deallocate(true);
@@ -453,7 +468,7 @@ const tests: GameFileTests<QuestionAndAnswer> = {
 			await pmMinigame.onNextRound();
 			assert(pmMinigame.answers.length);
 			pmMinigame.canGuess = true;
-			await runCommand('guess', pmMinigame.answers[0], user, name);
+			runCommand('guess', pmMinigame.answers[0], user, name);
 			assert(pmMinigame.ended);
 
 			pmMinigame.deallocate(true);

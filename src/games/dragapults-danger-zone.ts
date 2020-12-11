@@ -13,6 +13,7 @@ const mapSymbols: {player: string; empty: string} = {
 };
 
 class DragapultsDangerZone extends ScriptedGame {
+	canFire: boolean = false;
 	columnLetters: string[] = letters;
 	currentPlayer: Player | null = null;
 	currentTeam: TeamIds = 'red';
@@ -37,7 +38,7 @@ class DragapultsDangerZone extends ScriptedGame {
 			(25 * ((this.gridSize * 2) + 1)) + 'px"><tr style="height:25px"><td>&nbsp;</td>';
 
 		for (const letter of this.columnLetters) {
-			html += '<td style="background: ' + Tools.hexColorCodes["Light Gray"]["background-color"] + '">' + letter + '</td>';
+			html += '<td style="background: ' + Tools.hexColorCodes["Light-Gray"]["background-color"] + '">' + letter + '</td>';
 		}
 		html += '</tr>';
 
@@ -49,7 +50,7 @@ class DragapultsDangerZone extends ScriptedGame {
 
 		const hexColors: HexColor[] = ['Red', 'Blue'];
 		for (let i = 1; i <= this.gridSize; i++) {
-			html += '<tr style="height:25px"><td style="background: ' + Tools.hexColorCodes["Light Gray"]["background-color"] + '">' +
+			html += '<tr style="height:25px"><td style="background: ' + Tools.hexColorCodes["Light-Gray"]["background-color"] + '">' +
 				i + '</td>';
 			let currentTeamIndex = 0;
 			for (let j = 0; j < this.columnLetters.length; j++) {
@@ -82,8 +83,16 @@ class DragapultsDangerZone extends ScriptedGame {
 	}
 
 	onRemovePlayer(player: Player): void {
+		if (player.team!.id in this.playerOrders) {
+			const index = this.playerOrders[player.team!.id].indexOf(player);
+			if (index !== -1) this.playerOrders[player.team!.id].splice(index, 1);
+		}
+
 		if (player === this.currentPlayer) {
 			this.nextRound();
+		} else {
+			const location = this.playerLocations.get(player);
+			if (location) this.addRevealedLocation(location);
 		}
 	}
 
@@ -134,6 +143,7 @@ class DragapultsDangerZone extends ScriptedGame {
 	onNextRound(): void {
 		if (this.currentPlayer) {
 			if (!this.currentPlayer.eliminated) {
+				this.addRevealedLocation(this.playerLocations.get(this.currentPlayer)!);
 				this.say(this.currentPlayer.name + " did not fire anywhere!");
 				this.eliminatePlayer(this.currentPlayer, "You did not fire anywhere on the map!");
 			}
@@ -169,6 +179,7 @@ class DragapultsDangerZone extends ScriptedGame {
 			this.displayMap();
 			const text = "It is " + player.name + " of the " + team.name + " Team's turn to fire!";
 			this.on(text, () => {
+				this.canFire = true;
 				this.timeout = setTimeout(() => this.nextRound(), 30 * 1000);
 			});
 			this.say(text);
@@ -216,6 +227,7 @@ class DragapultsDangerZone extends ScriptedGame {
 		if (!playerAPokemon && !playerBPokemon) {
 			const text = "Neither player selected a Pokemon!";
 			this.on(text, () => {
+				this.currentPlayer = null;
 				this.timeout = setTimeout(() => this.nextRound(), 5 * 1000);
 			});
 			this.say(text);
@@ -249,6 +261,7 @@ class DragapultsDangerZone extends ScriptedGame {
 				playerB.name + "'s " + playerBPokemon!.name + "!";
 		}
 
+		this.currentPlayer = null;
 		if (playerAWin || playerBWin) this.setLargestTeam();
 
 		this.on(text, () => {
@@ -258,8 +271,10 @@ class DragapultsDangerZone extends ScriptedGame {
 	}
 
 	handleMatchupResult(winner: Player, loser: Player, winnerPokemon: IPokemon, loserPokemon?: IPokemon): string {
-		this.eliminatePlayer(loser, loserPokemon ? "You were defeated by " + winner.name + "!" : "You did not select a Pokemon!");
-		this.addRevealedLocation(this.playerLocations.get(loser)!);
+		if (!loserPokemon || loser !== this.currentPlayer) {
+			this.eliminatePlayer(loser, loserPokemon ? "You were defeated by " + winner.name + "!" : "You did not select a Pokemon!");
+			this.addRevealedLocation(this.playerLocations.get(loser)!);
+		}
 
 		const index = this.playerOrders[loser.team!.id].indexOf(loser);
 		if (index !== -1) this.playerOrders[loser.team!.id].splice(index, 1);
@@ -292,7 +307,7 @@ class DragapultsDangerZone extends ScriptedGame {
 	fireDreepy(player: Player, locationKey: string): void {
 		if (this.timeout) clearTimeout(this.timeout);
 
-		this.currentPlayer = null;
+		this.canFire = false;
 		this.addRevealedLocation(locationKey);
 
 		const text = "The Dreepy was fired to **" + locationKey + "**...";
@@ -311,12 +326,14 @@ class DragapultsDangerZone extends ScriptedGame {
 				if (hitPlayer) {
 					this.say(hitPlayer.name + " was there!");
 					if (hitPlayer.eliminated) {
+						this.currentPlayer = null;
 						this.nextRound();
 					} else {
 						this.startMatchup([player, hitPlayer]);
 					}
 				} else {
 					this.say("__Splash__! Nothing happened.");
+					this.currentPlayer = null;
 					this.nextRound();
 				}
 			}, 3 * 1000);
@@ -361,7 +378,7 @@ const commands: GameCommandDefinitions<DragapultsDangerZone> = {
 	fire: {
 		// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
 		command(target, room, user) {
-			if (this.players[user.id] !== this.currentPlayer) return false;
+			if (!this.canFire || this.players[user.id] !== this.currentPlayer) return false;
 
 			const player = this.players[user.id];
 			const opposingTeam = this.teams[this.currentTeam];

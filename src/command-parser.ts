@@ -57,7 +57,7 @@ export class CommandContext {
 	}
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	async run(newCommand?: string, newTarget?: string): Promise<any> {
+	run(newCommand?: string, newTarget?: string): any {
 		let command = this.originalCommand;
 		if (newCommand) {
 			command = Tools.toId(newCommand);
@@ -71,23 +71,18 @@ export class CommandContext {
 		}
 		const target = newTarget !== undefined ? newTarget : this.target;
 
-		if (Commands[command].asyncCommand) {
-			// eslint-disable-next-line @typescript-eslint/no-unsafe-return
-			return await Commands[command].asyncCommand!.call(this, target, this.room, this.user, command);
-		} else {
-			// eslint-disable-next-line @typescript-eslint/no-unsafe-return
-			return Commands[command].command!.call(this, target, this.room, this.user, command);
-		}
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-return
+		return Commands[command].command.call(this, target, this.room, this.user, command);
 	}
 
-	async runMultipleTargets(delimiter: string): Promise<void> {
+	runMultipleTargets(delimiter: string, command: string): void {
 		if (!delimiter) return;
 		const parts = this.target.split(delimiter);
 		const lastMultipleTarget = parts.length - 1;
 		this.runningMultipleTargets = true;
 		for (let i = 0; i < parts.length; i++) {
 			if (i === lastMultipleTarget) this.runningMultipleTargets = false;
-			await this.run(this.originalCommand, parts[i].trim());
+			this.run(command, parts[i].trim());
 		}
 	}
 
@@ -168,7 +163,7 @@ export class CommandParser {
 	}
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	async parse(room: Room | User, user: User, message: string): Promise<any> {
+	parse(room: Room | User, user: User, message: string): any {
 		if (!this.isCommandMessage(message)) return;
 		message = message.substr(1);
 		let command: string;
@@ -181,17 +176,15 @@ export class CommandParser {
 			command = message.substr(0, spaceIndex);
 			target = message.substr(spaceIndex + 1).trim();
 		}
+
 		command = Tools.toId(command);
-		if (!(command in Commands)) {
-			if (room.game) {
-				// send PM for wrong game command
-				await room.game.tryCommand(target, room, user, command);
-			}
-			return;
-		}
+		if (!(command in Commands)) return;
+
+		if (Config.roomIgnoredCommands && room.id in Config.roomIgnoredCommands &&
+			Config.roomIgnoredCommands[room.id].includes(command)) return;
 
 		// eslint-disable-next-line @typescript-eslint/no-unsafe-return
-		return await new CommandContext(command, target, room, user).run();
+		return new CommandContext(command, target, room, user).run();
 	}
 
 	getErrorText(error: CommandErrorArray): string {
@@ -216,15 +209,18 @@ export class CommandParser {
 		} else if (error[0] === 'invalidPokemon') {
 			if (error[1]) return "'" + error[1].trim() + "' is not a valid Pokemon.";
 			return "You must specify a valid Pokemon.";
+		} else if (error[0] === 'invalidType') {
+			if (error[1]) return "'" + error[1].trim() + "' is not a valid type.";
+			return "You must specify a valid type.";
+		} else if (error[0] === 'invalidEggGroup') {
+			if (error[1]) return "'" + error[1].trim() + "' is not a valid egg group.";
+			return "You must specify a valid type.";
 		} else if (error[0] === 'invalidTournamentFormat') {
 			if (error[1]) return "'" + error[1].trim() + "' is not a valid tournament format.";
 			return "You must specify a valid tournament format.";
 		} else if (error[0] === 'invalidUserHostedGameFormat') {
 			if (error[1]) return "'" + error[1].trim() + "' is not a valid user-hosted game format.";
 			return "You must specify a valid user-hosted game format.";
-		} else if (error[0] === 'invalidType') {
-			if (error[1]) return "'" + error[1].trim() + "' is not a valid type.";
-			return "You must specify a valid type.";
 		} else if (error[0] === 'invalidGameOption') {
 			return "'" + error[1].trim() + "' is not a valid game variant or option.";
 		} else if (error[0] === 'tooManyGameModes') {

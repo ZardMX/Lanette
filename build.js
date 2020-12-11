@@ -7,8 +7,13 @@ const builtFolder = path.join(__dirname, "built");
 const srcFolder = path.join(__dirname, "src");
 const pokemonShowdown = path.join(__dirname, 'pokemon-showdown');
 
-const removeFromBuild = ["require('better-sqlite3')"];
-const removeFromPackageJson = ["@types/better-sqlite3", "better-sqlite3", "husky"];
+const removeFromBuild = ["require('better-sqlite3')", 'require("better-sqlite3")'];
+const removeFromPackageJson = [
+	"@types/better-sqlite3", "probe-image-size", "sockjs",
+	"better-sqlite3", "cloud-env", "node-static", "nodemailer", "permessage-deflate", "sql-template-strings", "sqlite",
+	"node-oom-heapdump",
+	"@typescript-eslint/eslint-plugin", "@typescript-eslint/parser", "eslint", "eslint-plugin-import", "husky", "mocha"
+];
 
 const exec = util.promisify(child_process.exec);
 
@@ -95,6 +100,12 @@ function rewritePokemonShowdownPackageJson() {
 	for (const dependency in packageJson.devDependencies) {
 		if (removeFromPackageJson.includes(dependency)) delete packageJson.devDependencies[dependency];
 	}
+	for (const dependency in packageJson.optionalDependencies) {
+		if (removeFromPackageJson.includes(dependency)) delete packageJson.optionalDependencies[dependency];
+	}
+	for (const dependency in packageJson.secretDependencies) {
+		if (removeFromPackageJson.includes(dependency)) delete packageJson.secretDependencies[dependency];
+	}
 
 	fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson));
 }
@@ -124,7 +135,7 @@ async function setToSha(sha) {
 	return await exec('git reset --hard ' + sha).catch(e => console.log(e));
 }
 
-module.exports = async (resolve, reject, options) => {
+module.exports = async (options) => {
 	if (options === undefined) options = require('./get-options.js')();
 
 	if (!options.noBuild) {
@@ -149,8 +160,7 @@ module.exports = async (resolve, reject, options) => {
 
 			const remoteOutput = await exec('git remote -v').catch(e => console.log(e));
 			if (!remoteOutput || remoteOutput.Error) {
-				reject();
-				return;
+				throw new Error("git remote error");
 			}
 
 			let currentRemote;
@@ -178,8 +188,7 @@ module.exports = async (resolve, reject, options) => {
 			console.log("Cloning " + lanetteRemote + "...");
 			const cmd = await exec('git clone ' + lanetteRemote).catch(e => console.log(e));
 			if (!cmd || cmd.Error) {
-				reject();
-				return;
+				throw new Error("git clone error");
 			}
 
 			console.log("Cloned into pokemon-showdown");
@@ -191,14 +200,12 @@ module.exports = async (resolve, reject, options) => {
 		// revert build and package.json changes
 		let cmd = await exec('git reset --hard').catch(e => console.log(e));
 		if (!cmd || cmd.Error) {
-			reject();
-			return;
+			throw new Error("git reset error");
 		}
 
 		const revParseOutput = await exec('git rev-parse master').catch(e => console.log(e));
 		if (!revParseOutput || revParseOutput.Error) {
-			reject();
-			return;
+			throw new Error("git rev-parse error");
 		}
 
 		const currentSha = revParseOutput.stdout.replace("\n", "");
@@ -206,8 +213,7 @@ module.exports = async (resolve, reject, options) => {
 		cmd = await exec('git pull').catch(e => console.log(e));
 		if (!cmd || cmd.Error) {
 			await setToSha(currentSha);
-			reject();
-			return;
+			throw new Error("git pull error");
 		}
 
 		const lanetteSha = fs.readFileSync(path.join(__dirname, "pokemon-showdown-sha.txt")).toString();
@@ -218,15 +224,13 @@ module.exports = async (resolve, reject, options) => {
 			const gitShowCurrentOutput = await exec('git show -s --format=%ct ' + currentSha).catch(e => console.log(e));
 			if (!gitShowCurrentOutput || gitShowCurrentOutput.Error) {
 				await setToSha(currentSha);
-				reject();
-				return;
+				throw new Error("git show error");
 			}
 
 			const gitShowLanetteOutput = await exec('git show -s --format=%ct ' + lanetteSha).catch(e => console.log(e));
 			if (!gitShowLanetteOutput || gitShowLanetteOutput.Error) {
 				await setToSha(currentSha);
-				reject();
-				return;
+				throw new Error("git show error");
 			}
 
 			const currentTimestamp = parseInt(gitShowCurrentOutput.stdout.replace("\n", ""));
@@ -245,16 +249,14 @@ module.exports = async (resolve, reject, options) => {
 			const cmd = await setToSha(lanetteSha);
 			if (!cmd || cmd.Error) {
 				await setToSha(currentSha);
-				reject();
-				return;
+				throw new Error("git reset error");
 			}
 
 			console.log("Updated pokemon-showdown to latest compatible version");
 		} else {
 			const cmd = await setToSha(currentSha);
 			if (!cmd || cmd.Error) {
-				reject();
-				return;
+				throw new Error("git reset error");
 			}
 
 			for (const dist of pokemonShowdownDist) {
@@ -271,8 +273,7 @@ module.exports = async (resolve, reject, options) => {
 			const npmInstallOutput = await exec('npm install').catch(e => console.log(e));
 			if (!npmInstallOutput || npmInstallOutput.Error) {
 				await setToSha(currentSha);
-				reject();
-				return;
+				throw new Error("npm install error");
 			}
 
 			for (const dist of pokemonShowdownDist) {
@@ -284,8 +285,7 @@ module.exports = async (resolve, reject, options) => {
 			const nodeBuildOutput = await exec('node build --force').catch(e => console.log(e));
 			if (!nodeBuildOutput || nodeBuildOutput.Error) {
 				await setToSha(currentSha);
-				reject();
-				return;
+				throw new Error("pokemon-showdown build script error");
 			}
 		}
 
@@ -296,12 +296,11 @@ module.exports = async (resolve, reject, options) => {
 		console.log("Running tsc...");
 		const cmd = await exec('npm run tsc').catch(e => console.log(e));
 		if (!cmd || cmd.Error) {
-			reject();
-			return;
+			throw new Error("tsc error");
 		}
 
 		console.log("Successfully built files");
 	}
 
-	resolve();
+	return Promise.resolve();
 }

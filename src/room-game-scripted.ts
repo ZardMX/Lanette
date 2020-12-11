@@ -1,5 +1,5 @@
-import type { PRNGSeed } from "./prng";
-import { PRNG } from "./prng";
+import type { PRNGSeed } from "./lib/prng";
+import { PRNG } from "./lib/prng";
 import type { Player } from "./room-activity";
 import { Game } from "./room-game";
 import type { Room } from "./rooms";
@@ -10,6 +10,7 @@ import type {
 import type { User } from "./users";
 
 const JOIN_BITS = 10;
+const AUTO_START_VOTE_TIME = 5 * 1000;
 
 // base of 0 defaults option to 'off'
 const defaultOptionValues: Dict<IGameOptionValues> = {
@@ -151,9 +152,9 @@ export class ScriptedGame extends Game {
 			format.mode.initialize(this);
 		}
 
-		let htmlPageHeader = "<h3>";
+		let htmlPageHeader = "<h2>";
 		if (this.mascot) htmlPageHeader += Dex.getPokemonIcon(this.mascot);
-		htmlPageHeader += (this.format.nameWithOptions || this.format.name) + "</h3>";
+		htmlPageHeader += (this.format.nameWithOptions || this.format.name) + "</h2>";
 		this.htmlPageHeader = htmlPageHeader;
 	}
 
@@ -163,8 +164,7 @@ export class ScriptedGame extends Game {
 			if (command in this.commands) {
 				for (const i in this.commands) {
 					if (i === command) continue;
-					if ((this.commands[command].asyncCommand && this.commands[i].asyncCommand === this.commands[command].asyncCommand) ||
-						(this.commands[command].command && this.commands[i].command === this.commands[command].command)) {
+					if (this.commands[i].command === this.commands[command].command) {
 						commandsToOverwrite.push(i);
 					}
 				}
@@ -225,6 +225,13 @@ export class ScriptedGame extends Game {
 		return this.format.minigameDescription;
 	}
 
+	inactivityEnd(): void {
+		this.say("Ending the game due to a lack of players.");
+		Games.banFromNextVote(this.room as Room, this.format);
+		Games.setAutoCreateTimer(this.room as Room, 'scripted', AUTO_START_VOTE_TIME);
+		this.deallocate(false);
+	}
+
 	signups(): void {
 		this.signupsTime = Date.now();
 		this.signupsStarted = true;
@@ -266,8 +273,7 @@ export class ScriptedGame extends Game {
 						if (!this.start()) {
 							this.startTimer = setTimeout(() => {
 								if (!this.start()) {
-									this.say("Ending the game due to a lack of players.");
-									this.deallocate(false);
+									this.inactivityEnd();
 								}
 							}, startTimer);
 						}
@@ -358,6 +364,8 @@ export class ScriptedGame extends Game {
 		if (this.isMiniGame) {
 			Games.lastMinigames[this.room.id] = now;
 		} else if (!this.parentGame && !this.internalGame) {
+			Games.clearNextVoteBans(this.room);
+
 			usedDatabase = true;
 			const database = Storage.getDatabase(this.room);
 
@@ -527,8 +535,7 @@ export class ScriptedGame extends Game {
 			if (!(command in this.commands)) continue;
 			const commandDefinition = this.commands[command];
 			for (const i in this.commands) {
-				if ((commandDefinition.asyncCommand && this.commands[i].asyncCommand === commandDefinition.asyncCommand) ||
-					(commandDefinition.command && this.commands[i].command === commandDefinition.command)) {
+				if (this.commands[i].command === commandDefinition.command) {
 					commandsAndAliases.push(i);
 				}
 			}
@@ -593,7 +600,7 @@ export class ScriptedGame extends Game {
 		if (commandListener) this.commandsListeners.splice(this.commandsListeners.indexOf(commandListener, 1));
 	}
 
-	async tryCommand(target: string, room: Room | User, user: User, command: string): Promise<boolean> {
+	tryCommand(target: string, room: Room | User, user: User, command: string): boolean {
 		if (!(command in this.commands) || (!this.started && !this.commands[command].signupsGameCommand)) return false;
 
 		let canUseCommands = true;
@@ -621,13 +628,7 @@ export class ScriptedGame extends Game {
 			if (commandDefinition.pmOnly) return false;
 		}
 
-		let result: GameCommandReturnType;
-		if (commandDefinition.asyncCommand) {
-			result = await commandDefinition.asyncCommand.call(this, target, room, user, command);
-		} else {
-			result = commandDefinition.command!.call(this, target, room, user, command);
-		}
-
+		const result: GameCommandReturnType = commandDefinition.command.call(this, target, room, user, command);
 		if (!result) return false;
 
 		const triggeredListeners: IGameCommandCountListener[] = [];
@@ -657,7 +658,7 @@ export class ScriptedGame extends Game {
 		if (bits <= 0 || this.isPm(this.room) || (this.parentGame && this.parentGame.allowChildGameBits !== true)) return false;
 		if (bits > this.maxBits) bits = this.maxBits;
 		if (this.shinyMascot) bits *= 2;
-		Storage.addPoints(this.room, user.name, bits, this.format.id);
+		Storage.addPoints(this.room, Storage.gameLeaderboard, user.name, bits, this.format.id);
 		if (!noPm) {
 			user.say("You were awarded " + bits + " bits! To see your total amount, use the command ``" + Config.commandCharacter +
 				"bits " + this.room.title + "``.");
@@ -670,7 +671,7 @@ export class ScriptedGame extends Game {
 		bits = Math.floor(bits);
 		if (bits <= 0 || this.isPm(this.room) || (this.parentGame && this.parentGame.allowChildGameBits !== true)) return false;
 		if (this.shinyMascot) bits *= 2;
-		Storage.removePoints(this.room, user.name, bits, this.format.id);
+		Storage.removePoints(this.room, Storage.gameLeaderboard, user.name, bits, this.format.id);
 		if (!noPm) {
 			user.say("You lost " + bits + " bits! To see your remaining amount, use the command ``" + Config.commandCharacter + "bits " +
 				this.room.title + "``.");
@@ -773,7 +774,7 @@ export class ScriptedGame extends Game {
 	getRightPlayer?(): Player;
 	getForceEndMessage?(): string;
 	getPlayerSummary?(player: Player): void;
-	async getRandomAnswer?(): Promise<IRandomGameAnswer>;
+	getRandomAnswer?(): IRandomGameAnswer;
 	/** Return `false` to prevent a user from being added to the game (and send the reason to the user) */
 	onAddPlayer?(player: Player, lateJoin?: boolean): boolean | undefined;
 	onAddExistingPlayer?(player: Player): void;

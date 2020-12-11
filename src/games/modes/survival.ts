@@ -90,22 +90,31 @@ class Survival {
 
 		this.announceWinners();
 	}
+
+	canGuessAnswer(this: SurvivalThis, player: Player): boolean {
+		if (this.ended || !this.canGuess || !this.answers.length || player !== this.currentPlayer) return false;
+		return true;
+	}
 }
 
 const commandDefinitions: GameCommandDefinitions<SurvivalThis> = {
 	guess: {
 		// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
-		async asyncCommand(target, room, user): Promise<GameCommandReturnType> {
-			if (!this.canGuess || !this.answers.length || this.players[user.id] !== this.currentPlayer) return false;
-			const answer = await this.guessAnswer(this.players[user.id], target);
-			if (!answer) return false;
+		command(target, room, user): GameCommandReturnType {
+			if (!this.canGuessAnswer(this.players[user.id])) return false;
+
+			const player = this.players[user.id];
+			const answer = this.guessAnswer(player, target);
+			if (!answer || !this.canGuessAnswer(player)) return false;
+
 			if (this.timeout) clearTimeout(this.timeout);
 			this.currentPlayer = null;
 			if (this.getRemainingPlayerCount() === 1) {
 				this.end();
 				return true;
 			}
-			this.say('**' + user.name + '** advances to the next round! ' + this.getAnswers(answer));
+
+			this.say('**' + player.name + '** advances to the next round! ' + this.getAnswers(answer));
 			this.answers = [];
 			this.timeout = setTimeout(() => this.nextRound(), 5 * 1000);
 			return true;
@@ -147,7 +156,6 @@ const tests: GameFileTests<SurvivalThis> = {
 	},
 	'it should advance players who answer correctly': {
 		config: {
-			async: true,
 			commands: [['guess'], ['g']],
 		},
 		// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
@@ -161,7 +169,7 @@ const tests: GameFileTests<SurvivalThis> = {
 			const currentPlayer = game.currentPlayer;
 			assert(currentPlayer);
 			game.canGuess = true;
-			await runCommand(attributes.commands![0], game.answers[0], game.room, currentPlayer.name);
+			runCommand(attributes.commands![0], game.answers[0], game.room, currentPlayer.name);
 			assert(!currentPlayer.eliminated);
 			await game.onNextRound();
 			assert(game.currentPlayer !== currentPlayer);
@@ -169,7 +177,6 @@ const tests: GameFileTests<SurvivalThis> = {
 	},
 	'it should eliminate players who do not answer correctly': {
 		config: {
-			async: true,
 			commands: [['guess'], ['g']],
 		},
 		// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
@@ -183,7 +190,7 @@ const tests: GameFileTests<SurvivalThis> = {
 			const currentPlayer = game.currentPlayer;
 			assert(currentPlayer);
 			game.canGuess = true;
-			await runCommand(attributes.commands![0], 'mocha', game.room, currentPlayer.name);
+			runCommand(attributes.commands![0], 'mocha', game.room, currentPlayer.name);
 			// answers cleared when time runs out
 			game.answers = [];
 			await game.onNextRound();
